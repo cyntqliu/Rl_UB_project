@@ -1,5 +1,5 @@
 # Rl_UB_project
-The fruit of my 2016 summer internship! To be used with rllab (https://github.com/rllab/rllab), specifically the ddpg algorithm. Many of the programs here are just alexbeloi's but with a few edits.
+The fruit of my 2016 summer internship! To be used with rllab (https://github.com/rllab/rllab), specifically the ddpg algorithm. Many of the programs here are just the rllab contributors' but with a few edits.
 <p> Here were my files' locations when I worked with the rllab project directory:</p>
 <ol>
   <li> UB_env.py: /rllab/envs/box2d
