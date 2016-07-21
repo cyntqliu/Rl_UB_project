@@ -20,15 +20,17 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         
         f = open("LaMnO3 reflections.txt", 'r')
         self.hkl_actions = []; count = 0
+        self.obs = []
         for line in f: 
             count += 1
             intermed = line.split()
             if not re.search('^[^A-z]+$', intermed):
                 self.hkl_actions.append(intermed[0:4]) #h, k, l, two_theta
+                self.obs.append(intermed[11:13]) #Intensity and structure factor
         
         print self.hkl_actions
         self.hkl_space = discrete.Discrete(count)
-        f.close()
+        f.close()   
         
     @overrides
     def action_space(self):
@@ -72,12 +74,26 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         reward = reward_computer.next()
         self._invalidate_state_caches()
         done = self.is_current_done()
-        next_obs = self.get_current_obs()
+        next_obs = self.get_current_obs(action)
         return Step(observation=next_obs, reward=reward, done=done)
     
     @overrides
-    def get_raw_obs(self):
-        pass
+    def get_raw_obs(self, action):
+        """   Unlike in traditional physics problems, the
+        observations are not positions and velocities
+        Here, our observations are read directly from the machine
+        """
+        assert action[0] == 0
+        return 100.0
+    
+    @overrides
+    def get_current_obs(self, action):
+        """ Identical to box2d_env's method, but with different paramters """
+        raw_obs = self.get_raw_obs(action)
+        noisy_obs = self._inject_obs_noise(raw_obs)
+        if self.position_only:
+            return self._filter_position(noisy_obs)
+        return noisy_obs        
     
     @overrides
     def _get_position_ids(self):
