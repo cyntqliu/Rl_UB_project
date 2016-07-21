@@ -25,11 +25,13 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             count += 1
             intermed = line.split()
             if not re.search('^[^A-z]+$', intermed):
-                self.hkl_actions.append(intermed[0:4]) #h, k, l, two_theta
+                self.hkl_actions.append(intermed[0:5]) #h, k, l, theta, two_theta
                 self.obs.append(intermed[11:13]) #Intensity and structure factor
         
         print self.hkl_actions
+        self.hkl_actions = np.array(self.hkl_action)
         self.hkl_space = discrete.Discrete(count)
+        self.last_discrete = 0 #index of the last discrete action
         f.close()   
         
     @overrides
@@ -81,10 +83,39 @@ class Box2DEnvUB(Box2DEnv, Serializable):
     def get_raw_obs(self, action):
         """   Unlike in traditional physics problems, the
         observations are not positions and velocities
-        Here, our observations are read directly from the machine
+        Here, our observations will be read directly from the machine
+        
+        Now, we are spoon-feeding the program as to whether
+        significant observations were made in scans
         """
-        assert action[0] == 0
-        return 100.0
+        choice = action[0]
+        if choice == 0:
+            h_vec = action[1:4]
+            h_vecs = self.hkl_actions[:,1:4]
+            ind = np.where(h_vecs==h_vec)[0][0] #extract from tuple, then from array
+            self.last_discrete = ind
+            
+            intensity = self.obs[ind][0]; f_2 = self.obs[ind][1]
+            observation = [intensity, f_2]
+        elif choice == 1:
+            chi = action[1]; phi = action[2]
+            good = False
+            while good != True:
+                try:
+                    yesorno = int(raw_input("We have no moved to %d, %d /"
+                    "Do we see a significant peak at this location? Type 0 if no and 1 if yes " % (chi, phi)))
+                    if yesorno == 0 or yesorno == 1: good = True
+                    else: print "Please input a valid integer"
+                except:
+                    print "Please input a numerical value"
+            
+            if yesorno == 1:
+                intensity = self.obs[self.last_discrete][0]; f_2 = self.obs[self.last_discrete][1]
+                observation = [intensity, f_2]
+            else:
+                observation = [0, 0]
+                
+        return observation
     
     @overrides
     def get_current_obs(self, action):
