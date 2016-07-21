@@ -3,8 +3,9 @@ import math
 
 from rllab.envs.box2d.parser import find_body
 from rllab.core.serializable import Serializable
-from rllab.envs.box2d.box2d_env_ub import Box2DEnv
+from rllab.envs.box2d.box2d_env_ub import Box2DEnvUB
 from rllab.misc import autoargs
+from rllab.spaces.discrete import Discrete
 from rllab.misc.overrides import overrides
 #import rllab.algos.ddpg_with_explore as dwe
 
@@ -14,13 +15,10 @@ import lattice_calculator_procedural2 as lcp
 import time
 import sys
 
-class UBEnv(Box3DEnv, Serializable):
+class UBEnv(Box2DEnvUB, Serializable):
     
-    
-    
-    @autoargs.inherit(Box3DEnv.__init__)
-    #Parent is Box2DEnv
-    def __init__(self, *args, **kwargs):
+    @autoargs.inherit(Box2DEnvUB.__init__)
+    def __init__(self, filename=None, *args, **kwargs):
         """    Constants:
         omega is always 0, and set a constant for background noise
         """
@@ -42,6 +40,8 @@ class UBEnv(Box3DEnv, Serializable):
         self.max_two_theta = 360
         self.max_chi = 90
         self.max_phi = 360
+        self.min_chi = -90
+        self.min_phi = 0
         super(UBEnv, self).__init__(self.model_path("UB.xml.mako"),
                                     *args, **kwargs)
         self.time = time.time() #Time cost
@@ -92,17 +92,32 @@ class UBEnv(Box3DEnv, Serializable):
 
         Velocities are irrelevant
         """        
-        self.ring.position = (0,self.ring.position[1])
-        self.ring.linearVelocity = (self.ring.linearVelocity[0], self.ring.linearVelocity[1])
-        self.eu_cradle.position = (self.eu_cradle[0],0)
-        self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[0], self.eu_cradle.linearVelocity[1])     
+        self.ring.position = (self.chi,self.ring.position[1])
+        self.eu_cradle.position = (self.eu_cradle[0],self.phi)     
         
         return self.get_current_obs(), ub_0
     
     @overrides
+    def forward_dynamics(self, action):
+        choice = action[0]
+        if choice == 0: #discrete
+            assert len(action) == 4
+            exp_chi, exp_phi = self.calc_expected(action)
+            displacement = np.array([exp_chi - self.ring.position[0], exp_phi - self.eu_cradle.position[1]])
+            self.move(displacement)
+            
+        elif choice == 1: #continuous
+            action = np.clip(action, [self.min_chi, self.min_phi], [self.max_chi, self.max_phi])
+            displacement = np.array([action[0] - self.ring.position[0], action[1] - self.eu_cradle.position[1]])
+            self.move(displacement)
+            
+        else: raise NotImplementedError
+        
+    
+    @overrides
     def compute_reward(self, action, observation):
         yield
-        timeCost = (time.time() - self.time)/1000
+        timeCost = (time.time() - self.time)/1800
         if observation[0] >= self.background:
             accuracy = 1.0
         else: accuracy = 0.0
@@ -117,7 +132,7 @@ class UBEnv(Box3DEnv, Serializable):
     def is_current_done(self,action):
         exp_chi, exp_phi = self.calc_expected(action)
         loss = self.calc_loss(self, exp_chi, exp_phi)
-        if loss <= 1.0*10**(-6): return True #we have matched!
+        if loss <= 1.0*10**(-2): return True #we have matched!
         else: return ((abs(self.chi) > self.max_chi) or \
                      (abs(self.phi) > self.max_phi) or \
                      (abs(action[-1]) > self.max_two_theta))
@@ -152,6 +167,19 @@ class UBEnv(Box3DEnv, Serializable):
         ub_0 = np.dot(Umat, Bmat)
         
         return ub_0, Umat, chi2, phi2 #at the end of 2 measurements, we're obviously at the second measurement's location
+    
+    #Move
+    def move(self, displacement):
+        direction = displacement/np.linalg.norm(displacement) #unit direction vector
+        #Because action is a location...
+        self.ring.linearVelocity = (10.0*direction[0], 0); self.eu_cradle.linearVelocity = (0, 10.0*direction[1])
+        force = 0 #cheating
+        self.before_world_step(force)
+        self.world.Step(
+            self.extra_data.timeStep,
+            self.extra_data.velocityIterations,
+            self.extra_data.positionIterations
+        )        
     
     #Chi
     def calc_M(self):
@@ -233,24 +261,14 @@ class UBEnv(Box3DEnv, Serializable):
     def update_Umat(self, action, observation):
         exp_chi, exp_phi = self.calc_expected(action)
         loss = self.calc_loss(exp_chi, exp_phi)
-        if loss <= 1.0*10**(-6): pass #no changes
+        if loss <= 1.0*10**(-2): pass #no changes
         else:
             print "Sorry, still figuring out action selection."
             pass
     
     #Happens after each completed action
-    #---------------- INCOMPLETE ----------------
-    def add_ub(action, observation):
-        observations = {'h' : action[0],
-                        'k' : action[1],
-                        'l' : action[2],
-                        'two_theta': action[3],
-                        'str_factor' : observation[0],
-                        'f_2' : observation[1],
-                        'chi' : self.chi,
-                        'phi' : self.phi}
-        
-        pass
+    def add_ub(self, action, observation):
+        B_mat = np.dot(np.linalg.inv(self.U_mat), ubs[-1]) #U-1UB = B
+        self.U_mat = self.update_Umat(action, observation)
+        ubs.append(np.dot(self.U_mat, B_mat))
     
-
-        
