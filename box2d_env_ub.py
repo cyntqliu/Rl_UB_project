@@ -2,8 +2,9 @@ from rllab.envs.box2d.box2d_env import Box2DEnv
 from rllab.core.serializable import Serializable
 from rllab.misc import autoargs
 from rllab.misc.overrides import overrides
+from rllab.spaces import discrete, product, box
 
-from rllab.spaces import base, discrete, product
+import re
 
 BIG = 1e6
 class Box2DEnvUB(Box2DEnv, Serializable):
@@ -14,25 +15,65 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                   'problem non-Markovian!)')
     
     @autoargs.inherit(Box2DEnv.__init__)
-    def __init__(self, *args, **kwargs):
+    def __init__(self, filename=None, *args, **kwargs):
         super(Box2DEnvUB, self).__init__(*args, **kwargs)
         
-    @property
-    @overrides
-    def _state(self):
-        pass
+        f = open("LaMnO3 reflections.txt", 'r')
+        self.hkl_actions = []; count = 0
+        for line in f: 
+            count += 1
+            intermed = line.split()
+            if not re.search('^[^A-z]+$', intermed):
+                self.hkl_actions.append(intermed[0:4]) #h, k, l, two_theta
+        
+        print self.hkl_actions
+        self.hkl_space = discrete.Discrete(count)
+        f.close()
         
     @overrides
     def action_space(self):
-        pass
+        lbnd = np.array([-90, 0]); ubnd = np.array([90, 360])
+        return box.Box(lbnd, ubnd)
+    
+    def discrete_action_space(self):
+        return self.hkl_space
     
     @overrides
     def forward_dynamics(self, action):
-        pass
+        raise NotImplementedError
     
     @overrides
-    def step(self, action):
-        pass
+    def compute_reward(self, action, observation):
+        """
+        The implementation of this method should have two parts, structured
+        like the following:
+
+        <perform calculations before stepping the world>
+        yield
+        reward = <perform calculations after stepping the world>
+        yield reward
+        """
+        raise NotImplementedError
+    
+    @overrides
+    def step(self, action, observation):
+        """   This is identical to the
+        original step method, except it takes one more
+        parameter (needed by compute_reward).    """
+        
+        reward_computer = self.compute_reward(action, observation)
+        #forward the state
+        action = self._inject_action_noise(action)
+        for _ in range(self.frame_skip):
+            self.forward_dynamics(action)
+        # notifies that we have stepped the world
+        reward_computer.next()
+        # actually get the reward
+        reward = reward_computer.next()
+        self._invalidate_state_caches()
+        done = self.is_current_done()
+        next_obs = self.get_current_obs()
+        return Step(observation=next_obs, reward=reward, done=done)
     
     @overrides
     def get_raw_obs(self):
