@@ -80,6 +80,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         return Step(observation=next_obs, reward=reward, done=done)
     
     @overrides
+    #CHANGE TO MACHINE READING LATER
     def get_raw_obs(self, action):
         """   Unlike in traditional physics problems, the
         observations are not positions and velocities
@@ -95,8 +96,21 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             ind = np.where(h_vecs==h_vec)[0][0] #extract from tuple, then from array
             self.last_discrete = ind
             
-            intensity = self.obs[ind][0]; f_2 = self.obs[ind][1]
-            observation = [intensity, f_2]
+            good = False
+            while good != True:
+                try:
+                    yesorno = int(raw_input("Do you think our first UB matrix was correct? Type 0 if no and 1 if yes. "))
+                    if yesorno == 0 or yesorno == 1: good = True
+                    else: print "Please input a valid integer"
+                except:
+                    print "Please input a numerical value"
+                    
+            if yesorno == 1:
+                intensity = self.obs[ind][0]; f_2 = self.obs[ind][1]
+                observation = [intensity, f_2]
+            else:
+                observation = [0,0]
+                
         elif choice == 1:
             chi = action[1]; phi = action[2]
             good = False
@@ -128,4 +142,12 @@ class Box2DEnvUB(Box2DEnv, Serializable):
     
     @overrides
     def _get_position_ids(self):
-        pass
+        if self._position_ids is None:
+            self._position_ids = []
+            for idx, state in enumerate(self.extra_data.states):
+                if state.typ in ["xpos", "ypos", "apos", "dist", "angle"]:
+                    if state.typ == "xpos": self._position_ids.append("chi")
+                    elif state.typ == "ypos": self._position_ids.append("phi")
+                    else: self._position_ids.append(state.typ)
+                    
+        return self._position_ids        
