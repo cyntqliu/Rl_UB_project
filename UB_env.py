@@ -71,7 +71,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         """
         
         self.time = time.time()
-        ub_0, U_0, self.chi, self.phi = self.init_ub()
+        ub_0, U_0, self.chi, self.phi, h, k, l = self.init_ub()
         self.ubs.append(ub_0)
         self.U_mat = np.array(U_0)
         
@@ -95,7 +95,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.ring.position = (self.chi,self.ring.position[1])
         self.eu_cradle.position = (self.eu_cradle[0],self.phi)     
         
-        return self.get_current_obs(), ub_0
+        return self.get_current_obs([0,h,k,l]), ub_0 #get_current_obs must take an action
     
     @overrides
     def forward_dynamics(self, action):
@@ -111,7 +111,10 @@ class UBEnv(Box2DEnvUB, Serializable):
             displacement = np.array([action[0] - self.ring.position[0], action[1] - self.eu_cradle.position[1]])
             self.move(displacement)
             
-        else: raise NotImplementedError
+        else: 
+            print "There are only two choices of move types: discrete, or continuous."
+            print "Please do not recreate math."
+            raise NotImplementedError
         
     
     @overrides
@@ -166,20 +169,28 @@ class UBEnv(Box2DEnvUB, Serializable):
                        chi2, phi2, Bmat)
         ub_0 = np.dot(Umat, Bmat)
         
-        return ub_0, Umat, chi2, phi2 #at the end of 2 measurements, we're obviously at the second measurement's location
+        return ub_0, Umat, chi2, phi2, h2, k2, l2 #at the end of 2 measurements, we're obviously at the second measurement's location
     
     #Move
     def move(self, displacement):
         direction = displacement/np.linalg.norm(displacement) #unit direction vector
-        #Because action is a location...
-        self.ring.linearVelocity = (10.0*direction[0], 0); self.eu_cradle.linearVelocity = (0, 10.0*direction[1])
-        force = 0 #cheating
+        goal = [self.ring.position[0] + displacement[0], self.eu_cradle.position[1] + displacement[1]]
+        
+        self.ring.linearVelocity = (5.0*direction[0], 0); self.eu_cradle.linearVelocity = (0, 5.0*direction[1])
+        force = 0 #Assume smooth moving
         self.before_world_step(force)
-        self.world.Step(
-            self.extra_data.timeStep,
-            self.extra_data.velocityIterations,
-            self.extra_data.positionIterations
-        )        
+        
+        while (abs(self.ring.position[0] - goal[0]) > 0.05 and abs(self.eu_cradle.position[1] - goal[1]) > 0.05):
+            self.world.Step(
+                self.extra_data.timeStep,
+                self.extra_data.velocityIterations,
+                self.extra_data.positionIterations
+            )
+            self.chi = self.ring.position[0]
+            self.phi = self.eu_cradle.position[1]
+            
+        assert self.chi == self.ring.position[0]
+        assert self.phi == self.eu_cradle.position[1]
     
     #Chi
     def calc_M(self):
@@ -213,8 +224,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                     ch = 0 #must be zero so cos is 1, sin is 0
                     return ph, ch
                 else: 
-                    print "The UB matrix should not consist of linearly dependent columns"
-                    sys.exit()
+                    raise Exception("The UB matrix should not consist of linearly dependent columns")
                     
         for ph in phi_expected:
             try:
