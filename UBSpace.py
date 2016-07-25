@@ -6,6 +6,8 @@ from rllab.spaces.discrete import Discrete
 from rllab.misc import autoargs
 from rllab.misc.overrides import overrides
 
+import numpy as np
+
 class UBSpace(Space):
     
     @overrides
@@ -28,8 +30,8 @@ class UBSpace(Space):
             self.last_discrete = 0 #index of the last discrete action
             f.close()
             
-            #Now define continuous actions
-            lbnd = np.array([-90, 0]); ubnd = np.array([90, 360])
+            #Now define entire space as if continuous
+            lbnd = np.array([-90, 0, 0]); ubnd = np.array([90, 360, self.hkl_discrete.n])
             self.cont_space = Box(lbnd, ubnd)
         
         else:
@@ -41,11 +43,26 @@ class UBSpace(Space):
     def get_discrete(self):
         return self.hkl_discrete
     
-    def get_continuous_actions(self):
+    def get_all_actions(self):
+        print "Warning: we are currently treating the discrete actions as continuous"
         return self.cont_space
     
     def get_last_discrete(self):
         return self.last_discrete(self)
+    
+    @property
+    def flat_dim(self):
+        #two continuous, one discrete
+        return 3
+    
+    @property
+    def shape(self):
+        temp = np.array([1.0, 2.0, 3.0])
+        return temp.shape
+    
+    @property
+    def bounds(self):
+        return self.cont_space.bounds
     
     @overrides
     def contains(self, x):
@@ -72,9 +89,7 @@ class UBSpace(Space):
         classInfo = "Possible hkl actions: " + str(self.hkl_actions) + " and then the continuous space " + str(self.cont_space)
         return classInfo
     
-    @overrides
-    def shape(self):
-        pass
+    
     
     @overrides
     def flatten(self, x):
