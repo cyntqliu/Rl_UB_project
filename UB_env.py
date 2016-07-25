@@ -51,6 +51,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         #self.base = find_body(self.world, "base") #omega
         self.ring = find_body(self.world, "ring") #chi
         self.eu_cradle = find_body(self.world, "eu_cradle") #phi
+        self.last_discrete = np.zeros(shape=(1,5))
         
         self.ubs = []; self.U_mat = np.zeros(shape=(3,3))
         Serializable.__init__(self, *args, **kwargs)
@@ -93,7 +94,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         Velocities are irrelevant
         """        
         self.ring.position = (self.chi,self.ring.position[1])
-        self.eu_cradle.position = (self.eu_cradle[0],self.phi)     
+        self.eu_cradle.position = (self.eu_cradle[0],self.phi)
         
         return self.get_current_obs([0,h,k,l]), ub_0 #get_current_obs must take an action
     
@@ -101,8 +102,9 @@ class UBEnv(Box2DEnvUB, Serializable):
     def forward_dynamics(self, action):
         choice = action[0]
         if choice == 0: #discrete
-            assert len(action) == 4
-            exp_chi, exp_phi = self.calc_expected(action)
+            assert len(action) == 6
+            self.last_discrete = action[1:]
+            exp_chi, exp_phi = self.calc_expected()
             displacement = np.array([exp_chi - self.ring.position[0], exp_phi - self.eu_cradle.position[1]])
             self.move(displacement)
             
@@ -125,7 +127,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             accuracy = 1.0
         else: accuracy = 0.0
         
-        exp_chi, exp_phi = self.calc_expected(action)
+        exp_chi, exp_phi = self.calc_expected(self)
         loss = self.calc_loss(self, exp_chi, exp_phi)
         
         reward = accuracy - timeCost - loss/100.0
@@ -133,7 +135,7 @@ class UBEnv(Box2DEnvUB, Serializable):
     
     @overrides
     def is_current_done(self,action):
-        exp_chi, exp_phi = self.calc_expected(action)
+        exp_chi, exp_phi = self.calc_expected(self)
         loss = self.calc_loss(self, exp_chi, exp_phi)
         if loss <= 1.0*10**(-2): return True #we have matched!
         else: return ((abs(self.chi) > self.max_chi) or \
@@ -203,7 +205,8 @@ class UBEnv(Box2DEnvUB, Serializable):
         return N
     
     #Calculated expected angular values for a given hkl
-    def calc_expected(self, action):
+    def calc_expected(self):
+        action = self.last_discrete
         q = 4*math.pi()/self.wavelength * math.sin(action[-1]/2.0)
         Q_nu = np.dot(self.ubs[-1], action[0:3])
         
@@ -269,7 +272,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                 
     #---------------- INCOMPLETE ----------------
     def update_Umat(self, action, observation):
-        exp_chi, exp_phi = self.calc_expected(action)
+        exp_chi, exp_phi = self.calc_expected()
         loss = self.calc_loss(exp_chi, exp_phi)
         if loss <= 1.0*10**(-2): pass #no changes
         else:
@@ -281,4 +284,3 @@ class UBEnv(Box2DEnvUB, Serializable):
         B_mat = np.dot(np.linalg.inv(self.U_mat), ubs[-1]) #U-1UB = B
         self.U_mat = self.update_Umat(action, observation)
         ubs.append(np.dot(self.U_mat, B_mat))
-    
