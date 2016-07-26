@@ -14,6 +14,7 @@ import lattice_calculator_procedural2 as lcp
 
 import time
 import sys
+import random as rd
 
 class UBEnv(Box2DEnvUB, Serializable):
     
@@ -42,6 +43,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.max_phi = 360
         self.min_chi = -90
         self.min_phi = 0
+        self.correct = 0
         #Set up hkl and all actions
         super(UBEnv, self).__init__(self.model_path("UB.xml.mako"),
                                     *args, **kwargs)
@@ -76,6 +78,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         self.time = time.time()
         ub_0, U_0, self.chi, self.phi, h, k, l = self.init_ub()
+        self.h2 = h; self.k2 = k; self.l2 = l
         self.ubs.append(ub_0)
         self.U_mat = np.array(U_0)
         
@@ -143,27 +146,34 @@ class UBEnv(Box2DEnvUB, Serializable):
         ind = action[1]; act = self.hkl_actions[ind]
         exp_chi, exp_phi = self.calc_expected(self)
         loss = self.calc_loss(self, exp_chi, exp_phi)
-        if loss <= 1.0*10**(-2): return True #we have matched!
-        else: return ((abs(self.chi) > self.max_chi) or \
+        if loss <= 1.0*10**(-2):
+            self.correct += 1
+            if self.correct == 3: return True #we have matched!
+            else: return ((abs(self.chi) > self.max_chi) or \
+                     (abs(self.phi) > self.max_phi) or \
+                     (abs(act[-1]) > self.max_two_theta))
+        else:
+            self.correct = 0
+            return ((abs(self.chi) > self.max_chi) or \
                      (abs(self.phi) > self.max_phi) or \
                      (abs(act[-1]) > self.max_two_theta))
         
     #------------------------ ADDED METHODS -----------------------------------
 
-    def init_ub():
+    def init_ub(self):
         #Prompt user for parameters and reflections
-        a = float(input("Please input the length of (or an estimate of the length of) the a axis: "))
-        b = float(input("Please input the length of (or an estimate of the length of) the b axis: "))
-        c = float(input("Please input the length of (or an estimate of the length of) the c axis: "))
-        alpha = float(input("Please input the degree measure of (or an estimate of the degree measure of) alpha: "))
-        beta = float(input("Please input an estimate or value for the degree measure of beta: "))
-        gamma = float(input("Please input an estimate or value for the degree measure of gamma: "))
+        self.a = float(input("Please input the length of (or an estimate of the length of) the a axis: "))
+        self.b = float(input("Please input the length of (or an estimate of the length of) the b axis: "))
+        self.c = float(input("Please input the length of (or an estimate of the length of) the c axis: "))
+        self.alpha = float(input("Please input the degree measure of (or an estimate of the degree measure of) alpha: "))
+        self.beta = float(input("Please input an estimate or value for the degree measure of beta: "))
+        self.gamma = float(input("Please input an estimate or value for the degree measure of gamma: "))
         
         h1, k1, l1 = input("Please input a first hkl triple, with h, k, and l separated by commas: ")
-        h1 = int(h1); k1 = int(k1); l1 = int(l1)
-        print (h1, k1, l1)
+        self.h1 = int(h1); self.k1 = int(k1); self.l1 = int(l1)
+        #print (h1, k1, l1)
         omega1, chi1, phi1 = input("Please input the omega, chi, and phi angles used to find that reflection (again separated by commas): ")
-        omega1 = float(omega1); chi1 = float(chi1); phi1 = float(phi1)
+        self.omega1 = float(omega1); self.chi1 = float(chi1); self.phi1 = float(phi1)
         
         h2, k2, l2 = input("Please input a second hkl triple: ")
         h2 = int(h2); k2 = int(k2); l2 = int(l2)
@@ -171,9 +181,9 @@ class UBEnv(Box2DEnvUB, Serializable):
         omega2 = float(omega2); chi2 = float(chi2); phi1 = float(phi2)
         
         #Calculate initial value of UB
-        ast, bst, cst, alphast, betast, gammast = ub.star(a, b, c, alpha, beta, gamma) #Calculates reciprocal parameters
-        Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, c, alpha) #Calculates the initial B matrix
-        Umat = ub.calcU(h1, k1, l1, h2, k2, l2, omega1, chi1, phi1, omega2, 
+        ast, bst, cst, alphast, betast, gammast = ub.star(self.a, self.b, self.c, self.alpha, self.beta, self.gamma) #Calculates reciprocal parameters
+        Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, self.c, self.alpha) #Calculates the initial B matrix
+        Umat = ub.calcU(self.h1, self.k1, self.l1, h2, k2, l2, self.omega1, self.chi1, self.phi1, omega2, 
                        chi2, phi2, Bmat)
         ub_0 = np.dot(Umat, Bmat)
         
@@ -278,21 +288,44 @@ class UBEnv(Box2DEnvUB, Serializable):
                 print "Please input valid numerical values"
                 
     #---------------- INCOMPLETE ----------------
-    def update_Umat(self, action, observation):
-        if action[0] == 0:
-            exp_chi, exp_phi = self.calc_expected()
-            loss = self.calc_loss(exp_chi, exp_phi)
-            if loss <= 1.0*10**(-2): pass #no changes
-            else:
-                print "Sorry, not sure how this would be done"
-                pass
-        elif action[0] == 1:
-            exp_chi, exp_phi = self.calc_expected()
-    
+    def update_Umat(self, action):
+        exp_chi, exp_phi = self.calc_expected()
+        loss = self.calc_loss(exp_chi, exp_phi)
+        
+        if loss <= 1.0*10**(-2): pass #no changes
+        else:        
+            #Choose a previous index to change, among those with the same 2*theta
+            #Random for now                
+            ind = np.where(np.array([self.h2, self.k2, self.l2])==self.hkl_actions[:,0:3])[0][0][0]
+            action = self.hkl_actions[ind]
+            two_theta = action[-1]
+            
+            possible = []; i = 0
+            while self.hkl_actions[ind+i][-1] == two_theta:
+                if self.hkl_actions[0] != self.h2 and self.hkl_actions[1] != self.k2 and self.hkl_actions[2] != self.l2:
+                    possible.append(ind+i)
+                    i += 1
+            
+            if possible:
+                choice = rd.randint(0, len[possible])
+                new2 = self.hkl_actions[choice][0:3]
+                self.h2 = new2[0]; self.l2 = new2[1]; self.k2 = new2[2]
+                
+                #Update
+                ast, bst, cst, alphast, betast, gammast = ub.star(self.a, self.b, self.c, self.alpha, self.beta, self.gamma) #Calculates reciprocal parameters
+                Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, self.c, self.alpha) #Calculates the initial B matrix
+                Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, self.omega1, self.chi1, self.phi1, 0, 
+                               self.chi, self.phi, Bmat)
+                
+                return Umat
+            raise Exception("There are no other choices for the h-vector given %d as two theta", two_theta)
+        
+        return None
+                
     #Happens after each completed action
-    def add_ub(self, action, observation):
+    def add_ub(self, action):
         B_mat = np.dot(np.linalg.inv(self.U_mat), ubs[-1]) #U-1UB = B
-        self.U_mat = self.update_Umat(action, observation)
+        self.U_mat = self.update_Umat(action)
         ubs.append(np.dot(self.U_mat, B_mat))
     
 
