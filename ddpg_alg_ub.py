@@ -240,7 +240,7 @@ class DDPG(RLAlgorithm):
 
                 next_observation, reward, terminal, _ = self.env.step(action, observation)
                 UBEnv.observe_angles()
-                UBEnv.add_UB(action, next_observation) #appending the next, refined, UB matrix
+                UBEnv.add_UB() #appending the next, refined, UB matrix
                 path_length += 1
                 path_return += reward
 
