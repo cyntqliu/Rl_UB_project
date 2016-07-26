@@ -1,5 +1,8 @@
 import numpy as np
 import math
+import time
+import sys
+import random as rd
 
 from rllab.envs.box2d.parser import find_body
 from rllab.core.serializable import Serializable
@@ -11,10 +14,6 @@ from rllab.misc.overrides import overrides
 
 import ubmatrix as ub
 import lattice_calculator_procedural2 as lcp
-
-import time
-import sys
-import random as rd
 
 class UBEnv(Box2DEnvUB, Serializable):
     
@@ -78,6 +77,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         self.time = time.time()
         ub_0, U_0, self.chi, self.phi, h, k, l = self.init_ub()
+        ind = np.where(np.array[h,k,l]==self.hkl_actions[:,0:3])[0][0]
         self.h2 = h; self.k2 = k; self.l2 = l
         self.ubs.append(ub_0)
         self.U_mat = np.array(U_0)
@@ -102,22 +102,22 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.ring.position = (self.chi,self.ring.position[1])
         self.eu_cradle.position = (self.eu_cradle[0],self.phi)
         
-        return self.get_current_obs([0,h,k,l]), ub_0 #get_current_obs must take an action
+        return self.get_current_obs([0,-1, -1, ind]), ub_0 #get_current_obs must take an action
     
     @overrides
     def forward_dynamics(self, action):
-        choice = action[0]
+        assert len(action) == 4, "The action doesn't have the right number of dimensions!"
+        choice = math.floor(action[0]+0.5)
         if choice == 0: #discrete
-            assert len(action) == 2, "You haven't fully changed the actions to indices yet!"
-            ind = action[1]
+            ind = math.floor(action[3]+0.5)
             self.last_discrete = ind
             exp_chi, exp_phi = self.calc_expected()
             displacement = np.array([exp_chi - self.ring.position[0], exp_phi - self.eu_cradle.position[1]])
             self.move(displacement)
             
         elif choice == 1: #continuous
-            assert len(action) == 3, "Check the number of dimensions in this action! (It's supposed to be continuous)."
-            action = np.clip(action, [self.min_chi, self.min_phi], [self.max_chi, self.max_phi])
+            lb, ub = np.array([0,-90,0,0]), np.array([1,90,360,len(self.hkl_actions)])
+            action = np.clip(action, lb, ub)
             displacement = np.array([action[1] - self.ring.position[0], action[2] - self.eu_cradle.position[1]])
             self.move(displacement)
             
@@ -143,7 +143,12 @@ class UBEnv(Box2DEnvUB, Serializable):
     
     @overrides
     def is_current_done(self,action):
-        ind = action[1]; act = self.hkl_actions[ind]
+        choice = math.floor(action[0]+0.5)
+        if choice == 0:
+            ind = action[3]; act = self.hkl_actions[ind]
+        else:
+            ind = self.last_discrete
+        
         exp_chi, exp_phi = self.calc_expected(self)
         loss = self.calc_loss(self, exp_chi, exp_phi)
         if loss <= 1.0*10**(-2):
@@ -223,7 +228,7 @@ class UBEnv(Box2DEnvUB, Serializable):
     #Calculated expected angular values for a given hkl
     def calc_expected(self):
         ind = self.last_discrete
-        action = self.hkl_action[ind]
+        action = self.hkl_actions[ind]
         q = 4*math.pi()/self.wavelength * math.sin(action[-1]/2.0)
         Q_nu = np.dot(self.ubs[-1], action[0:3])
         
@@ -287,8 +292,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             except:
                 print "Please input valid numerical values"
                 
-    #---------------- INCOMPLETE ----------------
-    def update_Umat(self, action):
+    def update_Umat(self):
         exp_chi, exp_phi = self.calc_expected()
         loss = self.calc_loss(exp_chi, exp_phi)
         
@@ -301,7 +305,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             two_theta = action[-1]
             
             possible = []; i = 0
-            while self.hkl_actions[ind+i][-1] == two_theta:
+            while abs(self.hkl_actions[ind+i][-1] - two_theta) <= .2:
                 if self.hkl_actions[0] != self.h2 and self.hkl_actions[1] != self.k2 and self.hkl_actions[2] != self.l2:
                     possible.append(ind+i)
                     i += 1
@@ -323,10 +327,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         return None
                 
     #Happens after each completed action
-    def add_ub(self, action):
+    def add_ub(self):
         B_mat = np.dot(np.linalg.inv(self.U_mat), ubs[-1]) #U-1UB = B
-        self.U_mat = self.update_Umat(action)
+        self.U_mat = self.update_Umat()
         ubs.append(np.dot(self.U_mat, B_mat))
-    
-
-        
