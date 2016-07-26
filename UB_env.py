@@ -51,8 +51,6 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.time = time.time() #Time cost
         
         #Two independent bodies
-        #self.detector = find_body(self.world, "detector") #hkl determines two theta
-        #self.base = find_body(self.world, "base") #omega
         self.ring = find_body(self.world, "ring") #chi
         self.eu_cradle = find_body(self.world, "eu_cradle") #phi
         self.last_discrete = 0
