@@ -1,12 +1,12 @@
 from rllab.algos.ddpg_alg_ub import DDPG
 from rllab.envs.box2d.UB_env import UBEnv
-from rllab.envs.normalized_env import normalize
+from rllab.envs.normalized_env_ub import normalize
 # from rllab.misc.instrument import stub, run_experiment_lite
 from rllab.exploration_strategies.ou_strategy import OUStrategy
 from rllab.policies.deterministic_mlp_policy import DeterministicMLPPolicy
 from rllab.q_functions.continuous_mlp_q_function import ContinuousMLPQFunction
 
-env = normalize(UBEnv())
+env = normalize(UBEnv(filename="LaMnO3 reflections.txt"))
 
 policy = DeterministicMLPPolicy(
     env_spec=env.spec,
