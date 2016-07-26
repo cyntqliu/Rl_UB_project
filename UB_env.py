@@ -42,8 +42,11 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.max_phi = 360
         self.min_chi = -90
         self.min_phi = 0
+        #Set up hkl and all actions
         super(UBEnv, self).__init__(self.model_path("UB.xml.mako"),
                                     *args, **kwargs)
+        
+        print self.hkl_actions
         self.time = time.time() #Time cost
         
         #Two independent bodies
@@ -51,7 +54,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         #self.base = find_body(self.world, "base") #omega
         self.ring = find_body(self.world, "ring") #chi
         self.eu_cradle = find_body(self.world, "eu_cradle") #phi
-        self.last_discrete = np.zeros(shape=(1,5))
+        self.last_discrete = 0
         
         self.ubs = []; self.U_mat = np.zeros(shape=(3,3))
         Serializable.__init__(self, *args, **kwargs)
@@ -102,15 +105,17 @@ class UBEnv(Box2DEnvUB, Serializable):
     def forward_dynamics(self, action):
         choice = action[0]
         if choice == 0: #discrete
-            assert len(action) == 6
-            self.last_discrete = action[1:]
+            assert len(action) == 2, "You haven't fully changed the actions to indices yet!"
+            ind = action[1]
+            self.last_discrete = ind
             exp_chi, exp_phi = self.calc_expected()
             displacement = np.array([exp_chi - self.ring.position[0], exp_phi - self.eu_cradle.position[1]])
             self.move(displacement)
             
         elif choice == 1: #continuous
+            assert len(action) == 3, "Check the number of dimensions in this action! (It's supposed to be continuous)."
             action = np.clip(action, [self.min_chi, self.min_phi], [self.max_chi, self.max_phi])
-            displacement = np.array([action[0] - self.ring.position[0], action[1] - self.eu_cradle.position[1]])
+            displacement = np.array([action[1] - self.ring.position[0], action[2] - self.eu_cradle.position[1]])
             self.move(displacement)
             
         else: 
@@ -135,12 +140,13 @@ class UBEnv(Box2DEnvUB, Serializable):
     
     @overrides
     def is_current_done(self,action):
+        ind = action[1]; act = self.hkl_actions[ind]
         exp_chi, exp_phi = self.calc_expected(self)
         loss = self.calc_loss(self, exp_chi, exp_phi)
         if loss <= 1.0*10**(-2): return True #we have matched!
         else: return ((abs(self.chi) > self.max_chi) or \
                      (abs(self.phi) > self.max_phi) or \
-                     (abs(action[-1]) > self.max_two_theta))
+                     (abs(act[-1]) > self.max_two_theta))
         
     #------------------------ ADDED METHODS -----------------------------------
 
@@ -206,7 +212,8 @@ class UBEnv(Box2DEnvUB, Serializable):
     
     #Calculated expected angular values for a given hkl
     def calc_expected(self):
-        action = self.last_discrete
+        ind = self.last_discrete
+        action = self.hkl_action[ind]
         q = 4*math.pi()/self.wavelength * math.sin(action[-1]/2.0)
         Q_nu = np.dot(self.ubs[-1], action[0:3])
         
@@ -272,15 +279,21 @@ class UBEnv(Box2DEnvUB, Serializable):
                 
     #---------------- INCOMPLETE ----------------
     def update_Umat(self, action, observation):
-        exp_chi, exp_phi = self.calc_expected()
-        loss = self.calc_loss(exp_chi, exp_phi)
-        if loss <= 1.0*10**(-2): pass #no changes
-        else:
-            print "Sorry, still figuring out action selection."
-            pass
+        if action[0] == 0:
+            exp_chi, exp_phi = self.calc_expected()
+            loss = self.calc_loss(exp_chi, exp_phi)
+            if loss <= 1.0*10**(-2): pass #no changes
+            else:
+                print "Sorry, not sure how this would be done"
+                pass
+        elif action[0] == 1:
+            exp_chi, exp_phi = self.calc_expected()
     
     #Happens after each completed action
     def add_ub(self, action, observation):
         B_mat = np.dot(np.linalg.inv(self.U_mat), ubs[-1]) #U-1UB = B
         self.U_mat = self.update_Umat(action, observation)
         ubs.append(np.dot(self.U_mat, B_mat))
+    
+
+        
