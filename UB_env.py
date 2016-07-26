@@ -145,7 +145,7 @@ class UBEnv(Box2DEnvUB, Serializable):
     def is_current_done(self,action):
         choice = math.floor(action[0]+0.5)
         if choice == 0:
-            ind = action[3]; act = self.hkl_actions[ind]
+            ind = math.floor(action[3]+0.5); act = self.hkl_actions[ind]
         else:
             ind = self.last_discrete
         
