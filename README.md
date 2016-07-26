@@ -7,5 +7,7 @@ The fruit of my 2016 summer internship! To be used with rllab (https://github.co
   <li> UBSpace.py: /rllab/spaces/
   <li> UB.xml.mako: /rllab/envs/box2d/models/
   <li> normalized_env_ub.py: /rllab/envs/
+  <li> ddpg_UB.py: home directory
+  <li> ddpg_alg_ub.py: /rllab/algos/
 </ol>
 <p> Note that this work is very much in progress. Thank you for your cooperation. </p>
