@@ -19,6 +19,7 @@ class UBEnv(Box2DEnvUB, Serializable):
     
     @autoargs.inherit(Box2DEnvUB.__init__)
     def __init__(self, filename=None, *args, **kwargs):
+        fname = filename
         """    Constants:
         omega is always 0, and set a constant for background noise
         """
@@ -44,8 +45,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.min_phi = 0
         self.correct = 0
         #Set up hkl and all actions
-        super(UBEnv, self).__init__(self.model_path("UB.xml.mako"),
-                                    *args, **kwargs)
+        super(UBEnv, self).__init__(fname, self.model_path("UB.xml.mako"), *args, **kwargs)
         
         print self.hkl_actions
         self.time = time.time() #Time cost
