@@ -2,7 +2,7 @@ from rllab.envs.box2d.box2d_env import Box2DEnv
 from rllab.core.serializable import Serializable
 from rllab.misc import autoargs
 from rllab.misc.overrides import overrides
-from rllab.spaces import discrete, product, box
+from rllab.spaces import UBSpace
 
 import re
 
@@ -14,33 +14,28 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                   help='Noise added to the observations (note: this makes the '
                   'problem non-Markovian!)')
     
+    #GET READY TO REWRITE THIS. REMEMBER "MINIMALLY INVASIVE"
     @autoargs.inherit(Box2DEnv.__init__)
     def __init__(self, filename=None, *args, **kwargs):
         super(Box2DEnvUB, self).__init__(*args, **kwargs)
+        experiment_space = UBSpace("LaMnO3 reflections.txt")
         
-        f = open("LaMnO3 reflections.txt", 'r')
-        self.hkl_actions = []; count = 0
-        self.obs = []
-        for line in f: 
-            count += 1
-            intermed = line.split()
-            if not re.search('^[^A-z]+$', intermed):
-                self.hkl_actions.append(intermed[0:5]) #h, k, l, theta, two_theta
-                self.obs.append(intermed[11:13]) #Intensity and structure factor
-        
-        print self.hkl_actions
-        self.hkl_actions = np.array(self.hkl_action)
-        self.hkl_space = discrete.Discrete(count)
-        self.last_discrete = 0 #index of the last discrete action
-        f.close()   
-        
+        self.hkl_actions = experiment_space.get_hkl_actions()
+        self.hkl_space = experiment_space.get_discrete()
+        self.all_space = experiment_space.get_all_actions()
+        self.last_discrete = experiment_space.get_last_discrete()
+    
+    @property
     @overrides
     def action_space(self):
-        lbnd = np.array([-90, 0]); ubnd = np.array([90, 360])
-        return box.Box(lbnd, ubnd)
+        return cont_space
     
-    def discrete_action_space(self):
-        return self.hkl_space
+    @property
+    @overrides
+    def observation_space(self):
+        d = len(self.extra_data.states)
+        ubnd = BIG * np.ones(d)
+        return spaces.Box(0, ub) #no such thing as negative structure factor
     
     @overrides
     def forward_dynamics(self, action):
@@ -91,9 +86,9 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         """
         choice = action[0]
         if choice == 0:
-            h_vec = action[1:4]
-            h_vecs = self.hkl_actions[:,1:4]
-            ind = np.where(h_vecs==h_vec)[0][0] #extract from tuple, then from array
+            ind = action[1]
+            assert self.hkl_space.contains(ind), "Sorry, your hkl vector input does not exist for this crystal"
+            h_vec = self.hkl_actions[ind]
             self.last_discrete = ind
             
             good = False
