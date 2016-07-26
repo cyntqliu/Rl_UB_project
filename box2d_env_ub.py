@@ -14,7 +14,6 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                   help='Noise added to the observations (note: this makes the '
                   'problem non-Markovian!)')
     
-    #GET READY TO REWRITE THIS. REMEMBER "MINIMALLY INVASIVE"
     @autoargs.inherit(Box2DEnv.__init__)
     def __init__(self, filename=None, *args, **kwargs):
         super(Box2DEnvUB, self).__init__(*args, **kwargs)
@@ -86,7 +85,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         """
         choice = action[0]
         if choice == 0:
-            ind = action[1]
+            ind = action[3]
             assert self.hkl_space.contains(ind), "Sorry, your hkl vector input does not exist for this crystal"
             h_vec = self.hkl_actions[ind]
             self.last_discrete = ind
@@ -145,4 +144,4 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                     elif state.typ == "ypos": self._position_ids.append("phi")
                     else: self._position_ids.append(state.typ)
                     
-        return self._position_ids        
+        return self._position_ids
