@@ -2,6 +2,7 @@
 from .base import Space
 from rllab.spaces.box import Box
 from rllab.spaces.discrete import Discrete
+import re
 
 from rllab.misc import autoargs
 from rllab.misc.overrides import overrides
@@ -11,22 +12,24 @@ import numpy as np
 class UBSpace(Space):
     
     @overrides
-    def __init__(fname):
+    def __init__(self,fname):
         assert type(fname) is str, "Your file name is not a string"
-        if fname[-4:] is ".txt":
+        #print fname[-4:]
+        if fname[-4:] == ".txt":
             f = open(fname, 'r')
             self.hkl_actions = []; count = 0
             self.obs = []
             for line in f: 
                 count += 1
                 intermed = line.split()
-                if not re.search('^[^A-z]+$', intermed):
-                    self.hkl_actions.append(intermed[0:5]) #h, k, l, theta, two_theta
+                print intermed
+                if re.search('^[^A-z]+$', line) and intermed:
+                    self.hkl_actions.append([int(intermed[0]), int(intermed[1]), int(intermed[2]), float(intermed[3]), float(intermed[4])]) #h, k, l, theta, two_theta
                     self.obs.append(intermed[11:13]) #Intensity and structure factor
     
             print self.hkl_actions
             self.hkl_actions = np.array(self.hkl_actions)
-            self.hkl_discrete = discrete.Discrete(len(self.hkl_actions))
+            self.hkl_discrete = Discrete(len(self.hkl_actions))
             self.last_discrete = 0 #index of the last discrete action
             f.close()
             
@@ -60,7 +63,7 @@ class UBSpace(Space):
     
     @property
     def bounds(self):
-        return self.cont_space.bounds
+        return self.all_space.bounds
     
     @overrides
     def contains(self, x):
