@@ -237,7 +237,8 @@ class DDPG(RLAlgorithm):
                     path_length = 0
                     path_return = 0
                 action = self.es.get_action(itr, observation, policy=sample_policy)  # qf=qf)
-
+                
+                print self.env
                 next_observation, reward, terminal, _ = self.env.step(action, observation)
                 UBEnv.observe_angles()
                 UBEnv.add_UB() #appending the next, refined, UB matrix
