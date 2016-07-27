@@ -1,10 +1,10 @@
+from rllab import spaces
 from rllab.envs.box2d.box2d_env import Box2DEnv
 from rllab.core.serializable import Serializable
 from rllab.misc import autoargs
 from rllab.misc.overrides import overrides
-from rllab.spaces import UBSpace
-
-import re
+from rllab.spaces.UBSpace import UBSpace
+import numpy as np
 
 BIG = 1e6
 class Box2DEnvUB(Box2DEnv, Serializable):
@@ -16,25 +16,26 @@ class Box2DEnvUB(Box2DEnv, Serializable):
     
     @autoargs.inherit(Box2DEnv.__init__)
     def __init__(self, filename=None, *args, **kwargs):
+        fname = filename
         super(Box2DEnvUB, self).__init__(*args, **kwargs)
-        experiment_space = UBSpace("LaMnO3 reflections.txt")
+        self.experiment_space = UBSpace(fname)
         
-        self.hkl_actions = experiment_space.get_hkl_actions()
-        self.hkl_space = experiment_space.get_discrete()
-        self.all_space = experiment_space.get_all_actions()
-        self.last_discrete = experiment_space.get_last_discrete()
+        self.hkl_actions = self.experiment_space.get_hkl_actions()
+        self.hkl_space = self.experiment_space.get_discrete()
+        self.all_space = self.experiment_space.get_all_actions()
+        self.last_discrete = self.experiment_space.get_last_discrete()
     
     @property
     @overrides
     def action_space(self):
-        return cont_space
+        return self.experiment_space
     
     @property
     @overrides
     def observation_space(self):
         d = len(self.extra_data.states)
         ubnd = BIG * np.ones(d)
-        return spaces.Box(0, ub) #no such thing as negative structure factor
+        return spaces.Box(np.zeros(d), ubnd) #no such thing as negative structure factor
     
     @overrides
     def forward_dynamics(self, action):
@@ -83,6 +84,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         Now, we are spoon-feeding the program as to whether
         significant observations were made in scans
         """
+        print action
         choice = action[0]
         if choice == 0:
             ind = action[3]
@@ -122,8 +124,9 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                 observation = [intensity, f_2]
             else:
                 observation = [0, 0]
-                
-        return observation
+        
+        print observation  
+        return np.array(observation)
     
     @overrides
     def get_current_obs(self, action):
@@ -144,4 +147,4 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                     elif state.typ == "ypos": self._position_ids.append("phi")
                     else: self._position_ids.append(state.typ)
                     
-        return self._position_ids
+        return self._position_ids        
