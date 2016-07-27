@@ -71,16 +71,15 @@ class NormalizedEnvUB(ProxyEnv, Serializable):
     @property
     @overrides
     def action_space(self):
-        print "In normalized action_space!"
         ubnd = np.ones(self._wrapped_env.action_space.shape)
         return spaces.Box(-1 * ubnd, ubnd)
 
     @overrides
-    def step(self, action):
+    def step(self, action, observation):
         lb, ubnd = self._wrapped_env.action_space.bounds
         scaled_action = lb + (action + 1.) * 0.5 * (ubnd - lb)
         scaled_action = np.clip(scaled_action, lb, ubnd)
-        wrapped_step = self._wrapped_env.step(scaled_action)
+        wrapped_step = self._wrapped_env.step(scaled_action, observation)
         next_obs, reward, done, info = wrapped_step
         if self._normalize_obs:
             next_obs = self._apply_normalize_obs(next_obs)
