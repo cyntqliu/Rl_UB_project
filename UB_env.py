@@ -45,9 +45,8 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.min_phi = 0
         self.correct = 0
         #Set up hkl and all actions
-        super(UBEnv, self).__init__(fname, self.model_path("UB.xml.mako"), *args, **kwargs)
+        super(UBEnv, self).__init__(fname, self.model_path("UB.xml.mako"),*args, **kwargs)
         
-        print self.hkl_actions
         self.time = time.time() #Time cost
         
         #Two independent bodies
@@ -75,7 +74,9 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         self.time = time.time()
         ub_0, U_0, self.chi, self.phi, h, k, l = self.init_ub()
-        ind = np.where(np.array[h,k,l]==self.hkl_actions[:,0:3])[0][0]
+        print self.hkl_actions
+        print self.hkl_actions.shape
+        ind = np.where(np.array([h,k,l])==self.hkl_actions[:,0:3])[0][0]
         self.h2 = h; self.k2 = k; self.l2 = l
         self.ubs.append(ub_0)
         self.U_mat = np.array(U_0)
@@ -83,7 +84,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         good = False
         while good != True:
             try: 
-                self.wavelength = float(input("What wavelength are you using for this experiment? "))
+                self.wavelength = float(input("What wavelength are you using for this experiment? (In angstroms) "))
                 good = True
             except:
                 print "I'm sorry, please input a valid numerical value."
@@ -98,9 +99,9 @@ class UBEnv(Box2DEnvUB, Serializable):
         Velocities are irrelevant
         """        
         self.ring.position = (self.chi,self.ring.position[1])
-        self.eu_cradle.position = (self.eu_cradle[0],self.phi)
+        self.eu_cradle.position = (self.eu_cradle.position[0],self.phi)
         
-        return self.get_current_obs([0,-1, -1, ind]), ub_0 #get_current_obs must take an action
+        return self.get_current_obs([0,self.chi,self.phi,ind]), ub_0 #get_current_obs must take an action
     
     @overrides
     def forward_dynamics(self, action):
@@ -227,18 +228,19 @@ class UBEnv(Box2DEnvUB, Serializable):
     def calc_expected(self):
         ind = self.last_discrete
         action = self.hkl_actions[ind]
-        q = 4*math.pi()/self.wavelength * math.sin(action[-1]/2.0)
+        
+        q = 4*math.pi/self.wavelength * math.sin(math.radians(action[-1])/2.0)
         Q_nu = np.dot(self.ubs[-1], action[0:3])
         
         #MNQ_nu = [q, 0, 0]
-        phi_expected = [], chi_expected = [] #For testing cases
+        phi_expected = []; chi_expected = [] #For testing cases
         try: 
-            q1 = Q_nu[0], q2 = Q_nu[1], q3 = Q_nu[2]
+            q1 = Q_nu[0]; q2 = Q_nu[1]; q3 = Q_nu[2]
             cossqr_phi = 1.0/(1.0 + (q2/q3)**2)
             phi_expected.append(math.degrees(math.acos(math.sqrt(cossqr_phi))))
             phi_expected.append(math.degrees(math.acos(-math.sqrt(cossqr_phi))))
-            phi_expected.append(360.0 - math.degrees(math.acos(math.sqrt(cossqrt_phi))))
-            phi_expected.append(360.0 - math.degrees(maht.acos(-math.sqrt(cossqrt_phi))))
+            phi_expected.append(360.0 - math.degrees(math.acos(math.sqrt(cossqr_phi))))
+            phi_expected.append(360.0 - math.degrees(maht.acos(-math.sqrt(cossqr_phi))))
         except ZeroDivisionError:
             if q2 != 0: phi_expected.append(90); phi_expected.append(270)
             else: #only q1 is nonzero, and by logic it must be q because sin(chi) = 0 
@@ -329,3 +331,5 @@ class UBEnv(Box2DEnvUB, Serializable):
         B_mat = np.dot(np.linalg.inv(self.U_mat), ubs[-1]) #U-1UB = B
         self.U_mat = self.update_Umat()
         ubs.append(np.dot(self.U_mat, B_mat))
+    
+        
