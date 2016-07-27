@@ -21,7 +21,7 @@
 			  density="1"
 			  friction="${ring_friction}"
 			  shape="polygon"
-			  vertices="${compute_rect_vertices((0,0),(0,${eu_height}),eu_height/20}"
+			  vertices="${compute_rect_vertices((0,0),(0,eu_height),eu_height/2.0)}"
 			/>
 		</body>
 		
@@ -32,9 +32,9 @@
 			<fixture friction="${eu_friction}" group="-1" shape="polygon" box="0.1,180"/>
 		</body>
 		
-		<joint type="prisimatic" name="axis_slide" bodyA="x_track" bodyB="y_track"/>
-		<joint type="prisimatic" name="xaxis" bodyA="x_track" bodyB="ring"/>
-		<joint type="prisimatic" name="yaxis" bodyA="y_track" bodyB="eu_cradle"/>
+		<joint type="prismatic" name="axis_slide" bodyA="x_track" bodyB="y_track"/>
+		<joint type="prismatic" name="xaxis" bodyA="x_track" bodyB="ring"/>
+		<joint type="prismatic" name="yaxis" bodyA="y_track" bodyB="eu_cradle"/>
 		<state type="xpos" body="ring"/>
 		<state type="ypos" body="eu_cradle"/>
 		
