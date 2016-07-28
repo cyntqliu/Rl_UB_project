@@ -52,6 +52,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         #Two independent bodies
         self.ring = find_body(self.world, "ring") #chi
         self.eu_cradle = find_body(self.world, "eu_cradle") #phi
+        self.y_track = find_body(self.world, "y_track")
         self.last_discrete = 0
         
         self.ubs = []; self.U_mat = np.zeros(shape=(3,3))
@@ -74,8 +75,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         self.time = time.time()
         ub_0, U_0, self.chi, self.phi, h, k, l = self.init_ub()
-        print self.hkl_actions
-        print self.hkl_actions.shape
+        #print self.hkl_actions
         ind = np.where(np.array([h,k,l])==self.hkl_actions[:,0:3])[0][0]
         self.h2 = h; self.k2 = k; self.l2 = l
         self.ubs.append(ub_0)
@@ -111,19 +111,38 @@ class UBEnv(Box2DEnvUB, Serializable):
             ind = math.floor(action[3]+0.5)
             self.last_discrete = ind
             exp_chi, exp_phi = self.calc_expected()
-            displacement = np.array([exp_chi - self.ring.position[0], exp_phi - self.eu_cradle.position[1]])
-            self.move(displacement)
+            self.move(exp_chi, exp_phi)
             
         elif choice == 1: #continuous
             lb, ub = np.array([0,-90,0,0]), np.array([1,90,360,len(self.hkl_actions)])
             action = np.clip(action, lb, ub)
-            displacement = np.array([action[1] - self.ring.position[0], action[2] - self.eu_cradle.position[1]])
-            self.move(displacement)
+            self.move(action[1], action[2])
             
         else: 
             print "There are only two choices of move types: discrete, or continuous."
             print "Please do not recreate math."
             raise NotImplementedError
+        
+    @overrides
+    def step(self, action, observation):
+        """   This is identical to box2d_env_ub's 
+        step method, except also calls 2 environment-specific methods.    """
+    
+        reward_computer = self.compute_reward(action, observation)
+        #forward the state
+        action = self._inject_action_noise(action)
+        for _ in range(self.frame_skip):
+            self.forward_dynamics(action)
+        # notifies that we have stepped the world
+        reward_computer.next()
+        # actually get the reward
+        reward = reward_computer.next()
+        self._invalidate_state_caches()
+        done = self.is_current_done(action)
+        next_obs = self.get_current_obs(action)
+        self.observe_angles()
+        self.add_ub()
+        return Step(observation=next_obs, reward=reward, done=done)        
         
     
     @overrides
@@ -134,8 +153,8 @@ class UBEnv(Box2DEnvUB, Serializable):
             accuracy = 1.0
         else: accuracy = 0.0
         
-        exp_chi, exp_phi = self.calc_expected(self)
-        loss = self.calc_loss(self, exp_chi, exp_phi)
+        exp_chi, exp_phi = self.calc_expected()
+        loss = self.calc_loss(exp_chi, exp_phi)
         
         reward = accuracy - timeCost - loss/100.0
         yield reward
@@ -148,8 +167,8 @@ class UBEnv(Box2DEnvUB, Serializable):
         else:
             ind = self.last_discrete
         
-        exp_chi, exp_phi = self.calc_expected(self)
-        loss = self.calc_loss(self, exp_chi, exp_phi)
+        exp_chi, exp_phi = self.calc_expected()
+        loss = self.calc_loss(exp_chi, exp_phi)
         if loss <= 1.0*10**(-2):
             self.correct += 1
             if self.correct == 3: return True #we have matched!
@@ -194,22 +213,31 @@ class UBEnv(Box2DEnvUB, Serializable):
         return ub_0, Umat, chi2, phi2, h2, k2, l2 #at the end of 2 measurements, we're obviously at the second measurement's location
     
     #Move
-    def move(self, displacement):
-        direction = displacement/np.linalg.norm(displacement) #unit direction vector
-        goal = [self.ring.position[0] + displacement[0], self.eu_cradle.position[1] + displacement[1]]
-        
-        self.ring.linearVelocity = (5.0*direction[0], 0); self.eu_cradle.linearVelocity = (0, 5.0*direction[1])
+    def move(self, chi, phi):
+        goal = [chi, phi]
         force = 0 #Assume smooth moving
         self.before_world_step(force)
         
-        while (abs(self.ring.position[0] - goal[0]) > 0.05 and abs(self.eu_cradle.position[1] - goal[1]) > 0.05):
+        count = 0
+        #print "ring's x and eulerian cradle's y"
+        while (abs(self.ring.position[0] - goal[0]) > 0.05 or abs(self.eu_cradle.position[1] - goal[1]) > 0.05):
+            #print self.ring.position[0], self.eu_cradle.position[1]
             self.world.Step(
                 self.extra_data.timeStep,
                 self.extra_data.velocityIterations,
                 self.extra_data.positionIterations
             )
+            
+            if count == 0:
+                displacement = np.array([chi - self.ring.position[0], phi - self.eu_cradle.position[1]])
+                direction = displacement/np.linalg.norm(displacement) #unit direction vector
+                #print "displacement and direction"
+                #print displacement, direction
+                self.ring.linearVelocity = (2.0*direction[0], self.ring.linearVelocity[1]); self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[0], 2.0*direction[1])
+                
             self.chi = self.ring.position[0]
             self.phi = self.eu_cradle.position[1]
+            count += 1
             
         assert self.chi == self.ring.position[0]
         assert self.phi == self.eu_cradle.position[1]
@@ -240,7 +268,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             phi_expected.append(math.degrees(math.acos(math.sqrt(cossqr_phi))))
             phi_expected.append(math.degrees(math.acos(-math.sqrt(cossqr_phi))))
             phi_expected.append(360.0 - math.degrees(math.acos(math.sqrt(cossqr_phi))))
-            phi_expected.append(360.0 - math.degrees(maht.acos(-math.sqrt(cossqr_phi))))
+            phi_expected.append(360.0 - math.degrees(math.acos(-math.sqrt(cossqr_phi))))
         except ZeroDivisionError:
             if q2 != 0: phi_expected.append(90); phi_expected.append(270)
             else: #only q1 is nonzero, and by logic it must be q because sin(chi) = 0 
@@ -256,7 +284,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                 c = (q2**2/q3 + q3)*math.cos(ph)
                 sinsqr_chi = 1.0/(1.0 + (q1/c)**2)
                 chi_expected.append(math.degrees(math.asin(math.sqrt(sinsqr_chi))))
-                chi.expected.append(math.degrees(math.asin(-math.sqrt(sinsqr_chi))))
+                chi_expected.append(math.degrees(math.asin(-math.sqrt(sinsqr_chi))))
             except ZeroDivisionError: #q3 is 0 because c is never zero
                 #If we are here, q2 is nonzero
                 sinsqr_chi = 1.0/(1.0 + (q1/q2)**2)
@@ -266,7 +294,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         #Testing the possible phi, chi values
         exp_phi = 0; exp_chi = 0 #Default
         for ph in phi_expected:
-            for ch in ch_expected:
+            for ch in chi_expected:
                 val = q1*math.cos(ch) + q2*math.sin(ch)*math.sin(ph) + q3*math.sin(ch)*math.cos(ph)
                 if abs(q - val) <= 0.000001:
                     exp_phi = ph; exp_chi = ch
@@ -281,7 +309,11 @@ class UBEnv(Box2DEnvUB, Serializable):
     #def observe_angles(action):
         ##Get measurements from the machine
         
-    def observe_angles():
+    def observe_angles(self):
+        print "In observe angles!!"
+        print self.chi
+        print self.phi
+        print self.ubs
         good = False
         while good == False:
             try:
@@ -300,13 +332,13 @@ class UBEnv(Box2DEnvUB, Serializable):
         else:        
             #Choose a previous index to change, among those with the same 2*theta
             #Random for now                
-            ind = np.where(np.array([self.h2, self.k2, self.l2])==self.hkl_actions[:,0:3])[0][0][0]
+            ind = np.where(np.array([self.h2, self.k2, self.l2])==self.hkl_actions[:,0:3])[0][0]
             action = self.hkl_actions[ind]
             two_theta = action[-1]
             
             possible = []; i = 0
             while abs(self.hkl_actions[ind+i][-1] - two_theta) <= .2:
-                if self.hkl_actions[0] != self.h2 and self.hkl_actions[1] != self.k2 and self.hkl_actions[2] != self.l2:
+                if self.hkl_actions[ind+i][0] != self.h2 and self.hkl_actions[ind+i][1] != self.k2 and self.hkl_actions[ind+i][2] != self.l2:
                     possible.append(ind+i)
                     i += 1
             
@@ -328,8 +360,6 @@ class UBEnv(Box2DEnvUB, Serializable):
                 
     #Happens after each completed action
     def add_ub(self):
-        B_mat = np.dot(np.linalg.inv(self.U_mat), ubs[-1]) #U-1UB = B
+        B_mat = np.dot(np.linalg.inv(self.U_mat), self.ubs[-1]) #U-1UB = B
         self.U_mat = self.update_Umat()
         ubs.append(np.dot(self.U_mat, B_mat))
-    
-        
