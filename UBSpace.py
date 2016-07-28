@@ -22,13 +22,12 @@ class UBSpace(Space):
             for line in f: 
                 count += 1
                 intermed = line.split()
-                print intermed
                 if re.search('^[^A-z]+$', line) and intermed:
                     self.hkl_actions.append([int(intermed[0]), int(intermed[1]), int(intermed[2]), float(intermed[3]), float(intermed[4])]) #h, k, l, theta, two_theta
                     self.obs.append(intermed[11:13]) #Intensity and structure factor
     
-            print self.hkl_actions
             self.hkl_actions = np.array(self.hkl_actions)
+            self.obs = np.array(self.obs)
             self.hkl_discrete = Discrete(len(self.hkl_actions))
             self.last_discrete = 0 #index of the last discrete action
             f.close()
@@ -51,6 +50,9 @@ class UBSpace(Space):
     
     def get_last_discrete(self):
         return self.last_discrete
+    
+    def get_obs(self):
+        return self.obs
     
     @property
     def flat_dim(self):
@@ -111,5 +113,3 @@ class UBSpace(Space):
     @overrides
     def new_tensor_variables(self, name, extra_dims):
         pass
-        
-    
