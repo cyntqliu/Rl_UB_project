@@ -1,14 +1,14 @@
 <%
 	from rllab.misc.mako_utils import compute_rect_vertices
-	ring_friction = 0.0005
-	eu_friction = 0.0005
+	ring_friction = 0.005
+	eu_friction = 0.005
 	eu_height = 0.1
-	ring_radius = .5
+	ring_radius = 0.5
 %>
 
 <box2d>
 	<world timestep="0.05" gravity="0,0">
-		<body name="ring" type="dynamic" position="0,${ring_radius}">
+		<body name="ring" type="dynamic" position="-90,${ring_radius}">
 			<fixture
 			  density="1"
 			  friction="${ring_friction}"
@@ -16,7 +16,7 @@
 			  radius="${ring_radius}"
 			/>
 		</body>
-		<body name="eu_cradle" type="dynamic" position="${ring_radius},${ring_radius}">
+		<body name="eu_cradle" type="dynamic" position="180,0">
 			<fixture
 			  density="1"
 			  friction="${ring_friction}"
@@ -25,14 +25,13 @@
 			/>
 		</body>
 		
-		<body name="x_track" type="static" position="0,${ring_radius}">
+		<body name="x_track" type="static" position="-90,${ring_radius}">
 			<fixture friction="${ring_friction}" group="-1" shape="polygon" box="180,0.1"/>
 		</body>
-		<body name="y_track" type="dynamic" position="0,.505">
-			<fixture friction="${eu_friction}" group="-1" shape="polygon" box="0.1,180"/>
+		<body name="y_track" type="static" position="180,0">
+			<fixture friction="${eu_friction}" group="-1" shape="polygon" box="0.1,360"/>
 		</body>
 		
-		<joint type="prismatic" name="axis_slide" bodyA="x_track" bodyB="y_track"/>
 		<joint type="prismatic" name="xaxis" bodyA="x_track" bodyB="ring"/>
 		<joint type="prismatic" name="yaxis" bodyA="y_track" bodyB="eu_cradle"/>
 		<state type="xpos" body="ring"/>
