@@ -18,7 +18,7 @@ class NormalizedEnvUB(ProxyEnv, Serializable):
             obs_alpha=0.001,
             reward_alpha=0.001,
     ):
-        print "Normalized! I'm here!"
+        #print "Normalized! I'm here!"
         Serializable.quick_init(self, locals())
         ProxyEnv.__init__(self, env)
         assert isinstance(env.action_space, UBSpace)
