@@ -4,7 +4,9 @@ from rllab.core.serializable import Serializable
 from rllab.misc import autoargs
 from rllab.misc.overrides import overrides
 from rllab.spaces.UBSpace import UBSpace
+from rllab.envs.base import Step
 import numpy as np
+import math
 
 BIG = 1e6
 class Box2DEnvUB(Box2DEnv, Serializable):
@@ -24,6 +26,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         self.hkl_space = self.experiment_space.get_discrete()
         self.all_space = self.experiment_space.get_all_actions()
         self.last_discrete = self.experiment_space.get_last_discrete()
+        self.obs = self.experiment_space.get_obs()
     
     @property
     @overrides
@@ -70,7 +73,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         # actually get the reward
         reward = reward_computer.next()
         self._invalidate_state_caches()
-        done = self.is_current_done()
+        done = self.is_current_done(action)
         next_obs = self.get_current_obs(action)
         return Step(observation=next_obs, reward=reward, done=done)
     
@@ -84,18 +87,18 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         Now, we are spoon-feeding the program as to whether
         significant observations were made in scans
         """
-        print action
-        choice = action[0]
+        #print action
+        choice = math.floor(action[0]+0.5)
         if choice == 0:
-            ind = action[3]
-            assert self.hkl_space.contains(ind), "Sorry, your hkl vector input does not exist for this crystal"
+            ind = math.floor(action[3]+0.5)
+            assert self.hkl_space.contains(int(ind)), "Sorry, your hkl vector input does not exist for this crystal"
             h_vec = self.hkl_actions[ind]
             self.last_discrete = ind
             
             good = False
             while good != True:
                 try:
-                    yesorno = int(raw_input("Do you think our first UB matrix was correct? Type 0 if no and 1 if yes. "))
+                    yesorno = int(raw_input("Do you think our UB matrix was correct? Type 0 if no and 1 if yes. "))
                     if yesorno == 0 or yesorno == 1: good = True
                     else: print "Please input a valid integer"
                 except:
@@ -125,7 +128,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             else:
                 observation = [0, 0]
         
-        print observation  
+        #print observation  
         return np.array(observation)
     
     @overrides
@@ -147,4 +150,4 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                     elif state.typ == "ypos": self._position_ids.append("phi")
                     else: self._position_ids.append(state.typ)
                     
-        return self._position_ids        
+        return self._position_ids
