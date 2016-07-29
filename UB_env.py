@@ -210,6 +210,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         Umat = ub.calcU(self.h1, self.k1, self.l1, h2, k2, l2, self.omega1, self.chi1, self.phi1, omega2, 
                        chi2, phi2, Bmat)
         ub_0 = np.dot(Umat, Bmat)
+        print ub_0
         
         return ub_0, Umat, chi2, phi2, h2, k2, l2 #at the end of 2 measurements, we're obviously at the second measurement's location
     
@@ -332,7 +333,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             two_theta = action[-1]
             
             possible = []; i = 0
-            while abs(self.hkl_actions[ind+i][-1] - two_theta) <= 5:
+            while abs(self.hkl_actions[ind+i][-1] - two_theta) <= 2:
                 print "h2, k2, and l2"
                 print self.h2, self.k2, self.l2
                 if self.hkl_actions[ind+i][0] != self.h2 and self.hkl_actions[ind+i][1] != self.k2 and self.hkl_actions[ind+i][2] != self.l2:
@@ -340,7 +341,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                 i += 1
             
             if possible:
-                choice = rd.randint(0, len[possible])
+                choice = rd.randint(0, len(possible))
                 new2 = self.hkl_actions[choice][0:3]
                 self.h2 = new2[0]; self.l2 = new2[1]; self.k2 = new2[2]
                 
@@ -351,10 +352,11 @@ class UBEnv(Box2DEnvUB, Serializable):
                                self.chi, self.phi, Bmat)
 
                 return Umat
-            raise Exception("There are no other choices for the h-vector given %d as two theta", two_theta)
+            return self.Umat #The program proceeds if there are no other choices - there must be something wrong
                 
     #Happens after each completed action
     def add_ub(self):
         B_mat = np.dot(np.linalg.inv(self.U_mat), self.ubs[-1]) #U-1UB = B
         self.U_mat = self.update_Umat()
         self.ubs.append(np.dot(self.U_mat, B_mat))
+        print self.ubs[-1]
