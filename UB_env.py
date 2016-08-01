@@ -189,26 +189,26 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         h1, k1, l1 = input("Please input a first hkl triple, with h, k, and l separated by commas: ")
         self.h1 = int(h1); self.k1 = int(k1); self.l1 = int(l1)
-        omega1, chi1, phi1 = input("Please input the omega, chi, and phi angles used to find that reflection (again separated by commas): ")
-        self.omega1 = float(omega1); self.chi1 = float(chi1); self.phi1 = float(phi1)
+        chi1, phi1 = input("Please input the chi, and phi angles used to find that reflection (again separated by commas): ")
+        self.chi1 = float(chi1); self.phi1 = float(phi1)
         
         h2, k2, l2 = input("Please input a second hkl triple: ")
         self.h2 = int(h2); self.k2 = int(k2); self.l2 = int(l2)
-        omega2, chi2, phi2 = input("Please input the omega, chi, and phi angles used to find that reflection: ")
-        omega2 = float(omega2); chi2 = float(chi2); phi1 = float(phi2)
+        chi2, phi2 = input("Please input the chi and phi angles used to find that reflection: ")
+        chi2 = float(chi2); phi1 = float(ph2)
         
         pars = self.pars
         #Calculate initial value of UB
-        ub_0, Umat = self.calcs(omega2, chi2, phi2)
+        ub_0, Umat = self.calcs(chi2, phi2)
         print ub_0
         
         return ub_0, Umat, chi2, phi2, h2, k2, l2 #at the end of 2 measurements, we're obviously at the second measurement's location
     
-    def calcs(self, omega2, chi2, phi2):
+    def calcs(self, chi2, phi2):
         pars = self.pars
         ast, bst, cst, alphast, betast, gammast = ub.star(pars[0], pars[1], pars[2], pars[3], pars[4], pars[5]) #Calculates reciprocal parameters
         Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, pars[2], pars[3]) #Calculates the initial B matrix
-        Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, self.omega1, self.chi1, self.phi1, omega2, 
+        Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, self.chi1, self.phi1, 0,
                         chi2, phi2, Bmat)
         ub_0 = np.dot(Umat, Bmat) 
         return ub_0, Umat
@@ -345,7 +345,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                 self.h2 = new2[0]; self.l2 = new2[1]; self.k2 = new2[2]
                 
                 #Update
-                _, Umat = self.calcs(0, self.chi, self.phi)
+                _, Umat = self.calcs(self.chi, self.phi)
                 return Umat
             return self.Umat #The program proceeds if there are no other choices - there must be something wrong
                 
