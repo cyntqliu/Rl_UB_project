@@ -6,7 +6,7 @@ from rllab.exploration_strategies.ou_strategy import OUStrategy
 from rllab.policies.deterministic_mlp_policy import DeterministicMLPPolicy
 from rllab.q_functions.continuous_mlp_q_function import ContinuousMLPQFunction
 
-env = normalize(UBEnv(filename="LaMnO3 reflections.txt"))
+env = normalize(UBEnv())
 
 policy = DeterministicMLPPolicy(
     env_spec=env.spec,
