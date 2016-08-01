@@ -19,8 +19,7 @@ import lattice_calculator_procedural2 as lcp
 class UBEnv(Box2DEnvUB, Serializable):
     
     @autoargs.inherit(Box2DEnvUB.__init__)
-    def __init__(self, filename=None, *args, **kwargs):
-        fname = filename
+    def __init__(self, *args, **kwargs):
         """    Constants:
         omega is always 0, and set a constant for background noise
         """
@@ -46,7 +45,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.min_phi = 0
         self.correct = 0
         #Set up hkl and all actions
-        super(UBEnv, self).__init__(fname, self.model_path("UB.xml.mako"),*args, **kwargs)
+        super(UBEnv, self).__init__(self.model_path("UB.xml.mako"),*args, **kwargs)
         
         self.time = time.time() #Time cost
         
@@ -74,21 +73,21 @@ class UBEnv(Box2DEnvUB, Serializable):
         two_theta, omega, chi, phi: machine angles
         """
         
-        self.time = time.time()
+        super(UBEnv, self).setup_spaces()
+        f = open(self.fname, 'r')
+        line = f.next(); self.pars = []
+        while len(line.split()) == 1:
+            self.pars.append(float(line.split()[0]))
+            line = f.next()
+            
         ub_0, U_0, self.chi, self.phi, h, k, l = self.init_ub()
-        #print self.hkl_actions
         ind = np.where(np.array([h,k,l])==self.hkl_actions[:,0:3])[0][0]
         self.h2 = h; self.k2 = k; self.l2 = l
         self.ubs.append(ub_0)
         self.U_mat = np.array(U_0)
         
         good = False
-        while good != True:
-            try: 
-                self.wavelength = float(input("What wavelength are you using for this experiment? (In angstroms) "))
-                good = True
-            except:
-                print "I'm sorry, please input a valid numerical value."
+        self.wavelength = self.pars[6]
         
         """  Conversion Table
         
@@ -101,7 +100,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         """        
         self.ring.position = (self.chi,self.ring.position[1])
         self.eu_cradle.position = (self.eu_cradle.position[0],self.phi)
-        
+        f.close()
         return self.get_current_obs([0,self.chi,self.phi,ind]), ub_0 #get_current_obs must take an action
     
     @overrides
@@ -185,34 +184,34 @@ class UBEnv(Box2DEnvUB, Serializable):
     #------------------------ ADDED METHODS -----------------------------------
 
     def init_ub(self):
-        #Prompt user for parameters and reflections
-        self.a = float(input("Please input the length of (or an estimate of the length of) the a axis: "))
-        self.b = float(input("Please input the length of (or an estimate of the length of) the b axis: "))
-        self.c = float(input("Please input the length of (or an estimate of the length of) the c axis: "))
-        self.alpha = float(input("Please input the degree measure of (or an estimate of the degree measure of) alpha: "))
-        self.beta = float(input("Please input an estimate or value for the degree measure of beta: "))
-        self.gamma = float(input("Please input an estimate or value for the degree measure of gamma: "))
+        #Paramters are already in self.pars, use them
+        self.time = time.time() #In case the scientist ran to get a sandwich after reset
         
         h1, k1, l1 = input("Please input a first hkl triple, with h, k, and l separated by commas: ")
         self.h1 = int(h1); self.k1 = int(k1); self.l1 = int(l1)
-        #print (h1, k1, l1)
         omega1, chi1, phi1 = input("Please input the omega, chi, and phi angles used to find that reflection (again separated by commas): ")
         self.omega1 = float(omega1); self.chi1 = float(chi1); self.phi1 = float(phi1)
         
         h2, k2, l2 = input("Please input a second hkl triple: ")
-        h2 = int(h2); k2 = int(k2); l2 = int(l2)
+        self.h2 = int(h2); self.k2 = int(k2); self.l2 = int(l2)
         omega2, chi2, phi2 = input("Please input the omega, chi, and phi angles used to find that reflection: ")
         omega2 = float(omega2); chi2 = float(chi2); phi1 = float(phi2)
         
+        pars = self.pars
         #Calculate initial value of UB
-        ast, bst, cst, alphast, betast, gammast = ub.star(self.a, self.b, self.c, self.alpha, self.beta, self.gamma) #Calculates reciprocal parameters
-        Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, self.c, self.alpha) #Calculates the initial B matrix
-        Umat = ub.calcU(self.h1, self.k1, self.l1, h2, k2, l2, self.omega1, self.chi1, self.phi1, omega2, 
-                       chi2, phi2, Bmat)
-        ub_0 = np.dot(Umat, Bmat)
+        ub_0, Umat = self.calcs(omega2, chi2, phi2)
         print ub_0
         
         return ub_0, Umat, chi2, phi2, h2, k2, l2 #at the end of 2 measurements, we're obviously at the second measurement's location
+    
+    def calcs(self, omega2, chi2, phi2):
+        pars = self.pars
+        ast, bst, cst, alphast, betast, gammast = ub.star(pars[0], pars[1], pars[2], pars[3], pars[4], pars[5]) #Calculates reciprocal parameters
+        Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, pars[2], pars[3]) #Calculates the initial B matrix
+        Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, self.omega1, self.chi1, self.phi1, omega2, 
+                        chi2, phi2, Bmat)
+        ub_0 = np.dot(Umat, Bmat) 
+        return ub_0, Umat
     
     #Move
     def move(self, chi, phi):
@@ -333,7 +332,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             two_theta = action[-1]
             
             possible = []; i = 0
-            while abs(self.hkl_actions[ind+i][-1] - two_theta) <= 2:
+            while abs(self.hkl_actions[ind+i][-1] - two_theta) <= 6:
                 print "h2, k2, and l2"
                 print self.h2, self.k2, self.l2
                 if self.hkl_actions[ind+i][0] != self.h2 and self.hkl_actions[ind+i][1] != self.k2 and self.hkl_actions[ind+i][2] != self.l2:
@@ -346,11 +345,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                 self.h2 = new2[0]; self.l2 = new2[1]; self.k2 = new2[2]
                 
                 #Update
-                ast, bst, cst, alphast, betast, gammast = ub.star(self.a, self.b, self.c, self.alpha, self.beta, self.gamma) #Calculates reciprocal parameters
-                Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, self.c, self.alpha) #Calculates the initial B matrix
-                Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, self.omega1, self.chi1, self.phi1, 0, 
-                               self.chi, self.phi, Bmat)
-
+                _, Umat = self.calcs(0, self.chi, self.phi)
                 return Umat
             return self.Umat #The program proceeds if there are no other choices - there must be something wrong
                 
