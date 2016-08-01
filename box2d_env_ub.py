@@ -17,16 +17,19 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                   'problem non-Markovian!)')
     
     @autoargs.inherit(Box2DEnv.__init__)
-    def __init__(self, filename=None, *args, **kwargs):
-        fname = filename
+    def __init__(self, *args, **kwargs):
         super(Box2DEnvUB, self).__init__(*args, **kwargs)
-        self.experiment_space = UBSpace(fname)
+        self.setup_spaces()
+    
+    def setup_spaces(self):
+        self.fname = raw_input("What is the name of the file containing the possible hkl's? ") #Used by UBEnv
+        self.experiment_space = UBSpace(self.fname)
         
         self.hkl_actions = self.experiment_space.get_hkl_actions()
         self.hkl_space = self.experiment_space.get_discrete()
         self.all_space = self.experiment_space.get_all_actions()
         self.last_discrete = self.experiment_space.get_last_discrete()
-        self.obs = self.experiment_space.get_obs()
+        self.obs = self.experiment_space.get_obs()    
     
     @property
     @overrides
@@ -98,7 +101,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             good = False
             while good != True:
                 try:
-                    yesorno = int(raw_input("Do you think our UB matrix was correct? Type 0 if no and 1 if yes. "))
+                    yesorno = int(raw_input("Do we see a significant peak at the expected chi and phi values for <%d,%d,%d>? " % (h_vec[0], h_vec[1], h_vec[2])))
                     if yesorno == 0 or yesorno == 1: good = True
                     else: print "Please input a valid integer"
                 except:
@@ -150,4 +153,4 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                     elif state.typ == "ypos": self._position_ids.append("phi")
                     else: self._position_ids.append(state.typ)
                     
-        return self._position_ids
+        return self._position_ids        
