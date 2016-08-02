@@ -1,0 +1,7 @@
+Instructions
+
+1. Download rllab: https://github.com/rllab/rllab
+2. Put all the files from this repository into their respective locations in rllab
+3. Run ddpg_UB.py
+4. Follow instructions
+5. Please report any bugs to cynthiatliu
