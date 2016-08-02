@@ -6,4 +6,4 @@ Instructions
 4. Follow instructions in program
 5. Please report any bugs to cynthiatliu
 
-If you would like to use your own data, please conduct experiments or run LAZY to determine possible hkl planes. Then, format the hkl listing the same way the files in "data."
+If you would like to use your own data, please conduct experiments or run LAZY to determine possible hkl planes. Then, format the hkl listing the same way as the files in "data." Place your file in the same location in the rllab directory as the other .txt files, and be sure to type the name correctly during runtime!
