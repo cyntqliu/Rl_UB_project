@@ -13,6 +13,7 @@ class UBSpace(Space):
     
     @overrides
     def __init__(self,fname):
+        self.fname = fname
         assert type(fname) is str, "Your file name is not a string"
         #print fname[-4:]
         if fname[-4:] == ".txt":
@@ -21,9 +22,10 @@ class UBSpace(Space):
             self.obs = []
             for line in f: 
                 count += 1
+                line = line.strip()
                 intermed = line.split()
-                if re.search('^[^A-z]+$', line) and intermed:
-                    self.hkl_actions.append([int(intermed[0]), int(intermed[1]), int(intermed[2]), float(intermed[3]), float(intermed[4])]) #h, k, l, theta, two_theta
+                if re.search('^[^A-z]+$', line) and len(intermed) > 1:
+                    self.hkl_actions.append([int(intermed[0]), int(intermed[1]), int(intermed[2])]) #h, k, l - thetas are calculated
                     self.obs.append(intermed[11:13]) #Intensity and structure factor
     
             self.hkl_actions = np.array(self.hkl_actions)
@@ -75,13 +77,11 @@ class UBSpace(Space):
             
             if x[0] == 0: #discrete
                 action = x[1:]
-                assert len(action) is 3, "Your action doesn't have the right number of parameters"
                 for i in range(self.hkl_discrete.n):
                     if action[2] == i: return True
                 return False
             elif x[0] == 1: #continuous
                 action = x[1:]
-                assert len(action) is 3, "Your continuous action doesn't have the right number of parameters"
                 return action[0] >= -90 and action[0] <= 90 and action[1] >= 0 and action[1] <= 360
                 
         except:
