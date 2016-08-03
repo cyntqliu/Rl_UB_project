@@ -4,7 +4,7 @@ import time
 import sys
 import random as rd
 
-from rllab.envs.box2d.parser import find_body
+from rllab.envs.box2d.parser import find_body, find_joint
 from rllab.core.serializable import Serializable
 from rllab.envs.box2d.box2d_env_ub import Box2DEnvUB
 from rllab.misc import autoargs
@@ -52,7 +52,8 @@ class UBEnv(Box2DEnvUB, Serializable):
         #Two independent bodies
         self.ring = find_body(self.world, "ring") #chi
         self.eu_cradle = find_body(self.world, "eu_cradle") #phi
-        self.y_track = find_body(self.world, "y_track")
+        self.detector = find_body(self.world, "detector") #theta
+        self.pivot = find_joint(self.world, "angular_axis") #pivot that enables angular movement
         self.last_discrete = 0
         
         self.ubs = []; self.U_mat = np.zeros(shape=(3,3))
@@ -92,14 +93,15 @@ class UBEnv(Box2DEnvUB, Serializable):
         """  Conversion Table
         
         Positions
-        Only chi and phi are "independent," because the program has to figure them out using the UB matrix
-        h, k, l represent an action
-        two_theta and theta are read along with h, k, l
-
-        Velocities are irrelevant
+        theta is discrete
+        phi, chi is continuous
+        
+        Velocities are irrelevant, and acceleration does not exist
         """        
         self.ring.position = (self.chi,self.ring.position[1])
         self.eu_cradle.position = (self.eu_cradle.position[0],self.phi)
+        self.detector.angle = self.calc_theta(self.hkl_actions[ind][0], self.hkl_actions[ind][1], self.hkl_actions[ind][2])
+        self.theta = self.detector.angle
         f.close()
         return self.get_current_obs([0,self.chi,self.phi,ind]), ub_0 #get_current_obs must take an action
     
@@ -111,12 +113,14 @@ class UBEnv(Box2DEnvUB, Serializable):
             ind = math.floor(action[3]+0.5)
             self.last_discrete = ind
             exp_chi, exp_phi = self.calc_expected()
-            self.move(exp_chi, exp_phi)
+            theta = self.calc_theta(self.hkl_actions[ind][0], self.hkl_actions[ind][1], self.hkl_actions[2][ind])
+            self.move(theta, exp_chi, exp_phi)
             
         elif choice == 1: #continuous
             lb, ub = np.array([0,-90,0,0]), np.array([1,90,360,len(self.hkl_actions)])
             action = np.clip(action, lb, ub)
-            self.move(action[1], action[2])
+            theta = self.calc_theta(self.hkl_actions[self.last_discrete][0], self.hkl_actions[self.last_discrete][1], self.hkl_actions[self.last_discrete][2])
+            self.move(theta, action[1], action[2])
             
         else: 
             print "There are only two choices of move types: discrete, or continuous."
@@ -173,10 +177,19 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         if loss <= 1.0*10**(-2):
             self.correct += 1
-            if self.correct == 3: return True #we have matched!
-            else: return ((abs(self.chi) > self.max_chi) or \
+            if self.correct == 3:
+                print "The final UB matrix for this experiment is:"
+                print self.ubs[-1]
+                return True #we have matched!
+            else: 
+                truth = ((abs(self.chi) > self.max_chi) or \
                      (abs(self.phi) > self.max_phi) or \
                      (two_theta > self.max_two_theta))
+                if truth:
+                    print "The final UB matrix for this experiment is:"
+                    print self.ubs[-1]
+                    return True
+                else: return False
         else:
             self.correct = 0
             return ((abs(self.chi) > self.max_chi) or \
@@ -197,7 +210,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         h2, k2, l2 = input("Please input a second hkl triple: ")
         self.h2 = int(h2); self.k2 = int(k2); self.l2 = int(l2)
         chi2, phi2 = input("Please input the chi and phi angles used to find that reflection: ")
-        chi2 = float(chi2); phi1 = float(ph2)
+        chi2 = float(chi2); phi2 = float(phi2)
         
         pars = self.pars
         #Calculate initial value of UB
@@ -210,16 +223,17 @@ class UBEnv(Box2DEnvUB, Serializable):
         pars = self.pars
         ast, bst, cst, alphast, betast, gammast = ub.star(pars[0], pars[1], pars[2], pars[3], pars[5], pars[4]) #Calculates reciprocal parameters
         Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, pars[2], pars[3]) #Calculates the initial B matrix
-        Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, self.chi1, self.phi1, 0,
+        Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, 0, self.chi1, self.phi1, 0,
                         chi2, phi2, Bmat)
         ub_0 = np.dot(Umat, Bmat) 
         return ub_0, Umat
     
     def calc_theta(self, h, k, l):
+        pars = self.pars
         a = pars[0]; b = pars[1]; c = pars[2]
         alpha = math.radians(pars[3]); beta = math.radians(pars[5]); gamma = math.radians(pars[4])
         theta = 15
-        if alpha == beta and alpha == 90: #Ortho, tera, hexa, cubic
+        if alpha == beta and abs(math.pi/2 - alpha) < 0.0001: #Ortho, tera, hexa, cubic
             if a != b: #ortho
                 val = h**2/a**2 + k**2/b**2 + l**2/c**2
             elif a != c: #Tetra, hexa
@@ -231,20 +245,21 @@ class UBEnv(Box2DEnvUB, Serializable):
             else: #cubic
                 val = (h**2 + k**2 + l**2)/a**2
                 
-        elif alpha == beta and alpha == gamma and alpha != 90: #Rombo
-            assert a == b, "Something is wrong with this crystal. It's rombohedral but not."
-            assert b == c, "Something is wrong with this crystal. It's rombohedral but not."
-            assert a == c, "Something is wrong with this crystal. It's rombohedral but not."
+        elif alpha == beta and alpha == gamma and abs(math.pi/2 - alpha) < 0.0001: #Rombo
+            assert a == b, "Something is wrong with this crystal. It's rhombohedral but not."
+            assert b == c, "Something is wrong with this crystal. It's rhombohedral but not."
+            assert a == c, "Something is wrong with this crystal. It's rhombohedral but not."
             
             denom = a**2*(1 - 3*(math.cos(alpha))**2 + 2*(math.cos(alpha))**3)
             val = (h**2 + k**2 + l**2)*math.sin(alpha)**2 + 2*(h*k + k*l + h*l)*((math.cos(alpha))**2 - math.cos(alpha))
             
         else: #mono or tri
-            if beta == gamma and beta == 90: #mono
-                val = 1/math.sin(beta)**2 * (h**2/a**2 + \
-                                                (k**2 * math.sin(beta)**2)/b**2 + \
-                                                l**2/c**2 - \
-                                                2*h*l*math.cos(beta)/(a*c))
+            if beta == gamma and abs(math.pi/2 - alpha) < 0.0001: #mono
+                val = 1/math.sin(beta)**2 * \
+                    (h**2/a**2 + \
+                    (k**2 * math.sin(beta)**2)/b**2 + \
+                    l**2/c**2 - \
+                    2*h*l*math.cos(beta)/(a*c))
             else: #tri
                 #The worst equation ever
                 V=2*a*b*c*\
@@ -266,13 +281,19 @@ class UBEnv(Box2DEnvUB, Serializable):
         return theta
     
     #Move
-    def move(self, chi, phi):
-        goal = [chi, phi]
-        force = 0 #Assume smooth moving
-        self.before_world_step(force)
+    def move(self, theta, chi, phi):
+        goal = [theta, chi, phi]
+        accel = 0 #Assume no forces for now
         
+        self.pivot.motorEnabled = True
+        if self.detector.angle < theta: self.pivot.motorSpeed = 1e5
+        else: self.pivot.motorSpeed = -1e5
+        
+        self.before_world_step(accel)
         count = 0
-        while (abs(self.ring.position[0] - goal[0]) > 0.05 or abs(self.eu_cradle.position[1] - goal[1]) > 0.05):
+        while (abs(self.detector.angle - goal[0]) > 0.05 or \
+               abs(self.ring.position[0] - goal[1]) > 0.05 or \
+               abs(self.eu_cradle.position[1] - goal[2]) > 0.05):
             self.world.Step(
                 self.extra_data.timeStep,
                 self.extra_data.velocityIterations,
@@ -280,16 +301,16 @@ class UBEnv(Box2DEnvUB, Serializable):
             )
             
             if count == 0:
-                displacement = np.array([chi - self.ring.position[0], phi - self.eu_cradle.position[1]])
+                displacement = np.array([theta - self.detector.angle, chi - self.ring.position[0], phi - self.eu_cradle.position[1]])
                 direction = displacement/np.linalg.norm(displacement) #unit direction vector
-                self.ring.linearVelocity = (2.0*direction[0], self.ring.linearVelocity[1]); self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[0], 2.0*direction[1])
+                self.ring.linearVelocity = (2.0*direction[1], self.ring.linearVelocity[1]); self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[2], 2.0*direction[1])
+                self.detector.angularVelocity = 2.0*direction[0]
                 
+            self.theta = self.detector.angle
             self.chi = self.ring.position[0]
             self.phi = self.eu_cradle.position[1]
-            count += 1
             
-        self.chi = self.ring.position[0]
-        self.phi = self.eu_cradle.position[1]
+            count += 1
     
     #Chi
     def calc_M(self):
