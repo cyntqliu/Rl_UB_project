@@ -38,7 +38,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         """
         
-        self.max_two_theta = 360
+        self.max_two_theta = 180
         self.max_chi = 90
         self.max_phi = 360
         self.min_chi = -90
@@ -169,17 +169,19 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         exp_chi, exp_phi = self.calc_expected()
         loss = self.calc_loss(exp_chi, exp_phi)
+        two_theta = self.calc_theta(action[0], action[1], action[2])
+        
         if loss <= 1.0*10**(-2):
             self.correct += 1
             if self.correct == 3: return True #we have matched!
             else: return ((abs(self.chi) > self.max_chi) or \
                      (abs(self.phi) > self.max_phi) or \
-                     (abs(act[-1]) > self.max_two_theta))
+                     (two_theta > self.max_two_theta))
         else:
             self.correct = 0
             return ((abs(self.chi) > self.max_chi) or \
                      (abs(self.phi) > self.max_phi) or \
-                     (abs(act[-1]) > self.max_two_theta))
+                     (two_theta > self.max_two_theta))
         
     #------------------------ ADDED METHODS -----------------------------------
 
@@ -199,19 +201,69 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         pars = self.pars
         #Calculate initial value of UB
-        ub_0, Umat = self.calcs(chi2, phi2)
+        ub_0, Umat = self.calc_mats(chi2, phi2)
         print ub_0
         
         return ub_0, Umat, chi2, phi2, h2, k2, l2 #at the end of 2 measurements, we're obviously at the second measurement's location
     
-    def calcs(self, chi2, phi2):
+    def calc_mats(self, chi2, phi2):
         pars = self.pars
-        ast, bst, cst, alphast, betast, gammast = ub.star(pars[0], pars[1], pars[2], pars[3], pars[4], pars[5]) #Calculates reciprocal parameters
+        ast, bst, cst, alphast, betast, gammast = ub.star(pars[0], pars[1], pars[2], pars[3], pars[5], pars[4]) #Calculates reciprocal parameters
         Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, pars[2], pars[3]) #Calculates the initial B matrix
         Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, self.chi1, self.phi1, 0,
                         chi2, phi2, Bmat)
         ub_0 = np.dot(Umat, Bmat) 
         return ub_0, Umat
+    
+    def calc_theta(self, h, k, l):
+        a = pars[0]; b = pars[1]; c = pars[2]
+        alpha = math.radians(pars[3]); beta = math.radians(pars[5]); gamma = math.radians(pars[4])
+        theta = 15
+        if alpha == beta and alpha == 90: #Ortho, tera, hexa, cubic
+            if a != b: #ortho
+                val = h**2/a**2 + k**2/b**2 + l**2/c**2
+            elif a != c: #Tetra, hexa
+                if abs(gamma - 2*math.pi/3) <= 0.00001: #Hexa
+                    val = 4.0/3 * ((h**2 + h*k + k**2)/a**2) + l**2/c**2
+                else: #Tetra
+                    assert abs(gamma - math.pi/2) <= 0.00001, "Check your if statements in the determination of lattoice shape"
+                    val = (h**2 + k**2)/a**2 + l**2/c**2   
+            else: #cubic
+                val = (h**2 + k**2 + l**2)/a**2
+                
+        elif alpha == beta and alpha == gamma and alpha != 90: #Rombo
+            assert a == b, "Something is wrong with this crystal. It's rombohedral but not."
+            assert b == c, "Something is wrong with this crystal. It's rombohedral but not."
+            assert a == c, "Something is wrong with this crystal. It's rombohedral but not."
+            
+            denom = a**2*(1 - 3*(math.cos(alpha))**2 + 2*(math.cos(alpha))**3)
+            val = (h**2 + k**2 + l**2)*math.sin(alpha)**2 + 2*(h*k + k*l + h*l)*((math.cos(alpha))**2 - math.cos(alpha))
+            
+        else: #mono or tri
+            if beta == gamma and beta == 90: #mono
+                val = 1/math.sin(beta)**2 * (h**2/a**2 + \
+                                                (k**2 * math.sin(beta)**2)/b**2 + \
+                                                l**2/c**2 - \
+                                                2*h*l*math.cos(beta)/(a*c))
+            else: #tri
+                #The worst equation ever
+                V=2*a*b*c*\
+                np.sqrt(np.sin((alpha+beta+gamma)/2)*\
+                       np.sin((-alpha+beta+gamma)/2)*\
+                       np.sin((alpha-beta+gamma)/2)*\
+                       np.sin((alpha+beta-gamma)/2))
+                
+                S11 = (b*c*math.sin(alpha))**2
+                S22 = (a*c*math.sin(beta))**2
+                S33 = (a*b*math.sin(gamma))**2
+                S12 = a*b*c**2 * (math.cos(alpha)*math.cos(beta) - math.cos(gamma))
+                S23 = a**2*b*c * (math.cos(beta)*math.cos(gamma) - math.cos(alpha))
+                S31 = a*b**2*c * (math.cos(alpha)*math.cos(gamma) - math.cos(beta))
+                val = 1/V**2 * (S11*h**2 + S22*k**2 + S33*l**2 + 2*S12*h*k + 2*S23*k*l + 2*S31*h*l)
+        
+        d = math.sqrt(1/val)
+        theta = math.degrees(math.asin(self.wavelength/(2*d)))        
+        return theta
     
     #Move
     def move(self, chi, phi):
@@ -254,8 +306,8 @@ class UBEnv(Box2DEnvUB, Serializable):
         ind = self.last_discrete
         action = self.hkl_actions[ind]
         
-        q = 4*math.pi/self.wavelength * math.sin(math.radians(action[-1])/2.0)
-        Q_nu = np.dot(self.ubs[-1], action[0:3])
+        q = 4*math.pi/self.wavelength * math.sin(math.radians(self.calc_theta(action[0], action[1], action[2])))
+        Q_nu = np.dot(self.ubs[-1], action)
         
         #MNQ_nu = [q, 0, 0]
         phi_expected = []; chi_expected = [] #For testing cases
@@ -329,7 +381,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             #Random for now                
             ind = np.where(np.array([self.h2, self.k2, self.l2])==self.hkl_actions[:,0:3])[0][0]
             action = self.hkl_actions[ind]
-            two_theta = action[-1]
+            two_theta = 2*self.calc_theta(action[0], action[1], action[2])
             
             possible = []; i = 0
             while abs(self.hkl_actions[ind+i][-1] - two_theta) <= 6:
@@ -345,7 +397,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                 self.h2 = new2[0]; self.l2 = new2[1]; self.k2 = new2[2]
                 
                 #Update
-                _, Umat = self.calcs(self.chi, self.phi)
+                _, Umat = self.calc_mats(self.chi, self.phi)
                 return Umat
             return self.Umat #The program proceeds if there are no other choices - there must be something wrong
                 
