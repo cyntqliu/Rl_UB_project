@@ -405,7 +405,7 @@ class UBEnv(Box2DEnvUB, Serializable):
             two_theta = 2*self.calc_theta(action[0], action[1], action[2])
             
             possible = []; i = 0
-            while abs(self.hkl_actions[ind+i][-1] - two_theta) <= 6:
+            while abs(self.theta - two_theta) <= 6:
                 print "h2, k2, and l2"
                 print self.h2, self.k2, self.l2
                 if self.hkl_actions[ind+i][0] != self.h2 and self.hkl_actions[ind+i][1] != self.k2 and self.hkl_actions[ind+i][2] != self.l2:
