@@ -218,7 +218,7 @@ class DDPG(RLAlgorithm):
         path_length = 0
         path_return = 0
         terminal = False
-        observation, ub_0 = self.env.reset()
+        observation = self.env.reset()
 
         sample_policy = pickle.loads(pickle.dumps(self.policy))
         #self.experiment_space = self.env.action_space
