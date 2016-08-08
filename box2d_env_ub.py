@@ -22,14 +22,26 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         self.setup_spaces()
     
     def setup_spaces(self):
-        self.fname = raw_input("What is the name of the file containing the possible hkl's? ") #Used by UBEnv
-        self.experiment_space = UBSpace(self.fname)
-        
-        self.hkl_actions = self.experiment_space.get_hkl_actions()
-        self.hkl_space = self.experiment_space.get_discrete()
-        self.all_space = self.experiment_space.get_all_actions()
-        self.last_discrete = self.experiment_space.get_last_discrete()
-        self.obs = self.experiment_space.get_obs()    
+        try:
+            if self.experiments:
+                self.fname = raw_input("What is the name of the file containing the possible hkl's? ") #Used by UBEnv
+                self.experiment_space = UBSpace(self.fname)
+                
+                self.hkl_actions = self.experiment_space.get_hkl_actions()
+                self.hkl_space = self.experiment_space.get_discrete()
+                self.all_space = self.experiment_space.get_all_actions()
+                self.last_discrete = self.experiment_space.get_last_discrete()
+                self.obs = self.experiment_space.get_obs()
+        except:
+            self.experiments = True
+            self.fname = raw_input("Please provide a sample hkl file to allow our program to determine action and observation dimensions:\n ")
+            self.experiment_space = UBSpace(self.fname)
+            
+            self.hkl_actions = self.experiment_space.get_hkl_actions()
+            self.hkl_space = self.experiment_space.get_discrete()
+            self.all_space = self.experiment_space.get_all_actions()
+            self.last_discrete = self.experiment_space.get_last_discrete()
+            self.obs = self.experiment_space.get_obs()            
     
     @property
     @overrides
@@ -39,9 +51,9 @@ class Box2DEnvUB(Box2DEnv, Serializable):
     @property
     @overrides
     def observation_space(self):
-        d = len(self.extra_data.states)
-        ubnd = BIG * np.ones(d)
-        return spaces.Box(np.zeros(d), ubnd) #no such thing as negative structure factor
+        #2D space, no matter how many states (objects' positions and velocities)
+        ubnd = BIG * np.ones(2)
+        return spaces.Box(np.zeros(2), ubnd) #no such thing as negative structure factor
     
     @overrides
     def forward_dynamics(self, action):
@@ -81,7 +93,6 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         return Step(observation=next_obs, reward=reward, done=done)
     
     @overrides
-    #CHANGE TO MACHINE READING LATER
     def get_raw_obs(self, action):
         """   Unlike in traditional physics problems, the
         observations are not positions and velocities
@@ -95,7 +106,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         if choice == 0:
             ind = math.floor(action[3]+0.5)
             assert self.hkl_space.contains(int(ind)), "Sorry, your hkl vector input does not exist for this crystal"
-            h_vec = self.hkl_actions[ind]
+            h_vec = self.hkl_actions[int(ind)]
             self.last_discrete = ind
             
             good = False
@@ -118,8 +129,8 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             good = False
             while good != True:
                 try:
-                    yesorno = int(raw_input("We have no moved to %d, %d /"
-                    "Do we see a significant peak at this location? Type 0 if no and 1 if yes " % (chi, phi)))
+                    yesorno = int(raw_input("We have no moved to (chi, phi) = (%d, %d) for the same plane as that in the previous measurement /"
+                    "\nDo we see a significant peak at this location? Type 0 if no and 1 if yes " % (chi, phi)))
                     if yesorno == 0 or yesorno == 1: good = True
                     else: print "Please input a valid integer"
                 except:
