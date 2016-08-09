@@ -108,11 +108,12 @@ class UBEnv(Box2DEnvUB, Serializable):
     def forward_dynamics(self, action):
         assert len(action) == 4, "The action doesn't have the right number of dimensions!"
         choice = math.floor(action[0]+0.5)
+        lb, ub = np.array([0,-90,0,0]), np.array([1,90,360,len(self.hkl_actions)-1])
+        action = np.clip(action, lb, ub)        
         if choice == 0: #discrete
-            ind = math.floor(action[3]+0.5)
+            ind = math.floor(action[3])
             self.hkls.append(int(ind))
             theta = self.calc_theta(self.hkl_actions[ind][0], self.hkl_actions[ind][1], self.hkl_actions[ind][2])
-            self.hkls.append(self.hkl_actions[ind][0], self.hkl_actions[ind][1], self.hkl_actions[ind][2])
             if self.steps >= 2:
                 exp_chi, exp_phi = self.calc_expected()
                 self.move(theta, exp_chi, exp_phi)
@@ -121,9 +122,11 @@ class UBEnv(Box2DEnvUB, Serializable):
                 self.move(theta, chi, phi)
             
         elif choice == 1: #continuous
-            lb, ub = np.array([0,-90,0,0]), np.array([1,90,360,len(self.hkl_actions)])
-            action = np.clip(action, lb, ub)
-            theta = self.calc_theta(self.hkl_actions[self.hkls[-1][0]], self.hkl_actions[self.hkls[-1][1]], self.hkl_actions[self.hkls[-1][2]])
+            self.hkls.append(self.hkls[-1]) #measuring the same plane again
+            if self.steps == 0:
+                theta = self.calc_theta(self.hkl_actions[0][0], self.hkl_actions[0][1], self.hkl_actions[0][2])
+            else:
+                theta = self.calc_theta(self.hkl_actions[self.hkls[-1]][0], self.hkl_actions[self.hkls[-1]][1], self.hkl_actions[self.hkls[-1]][2])
             self.move(theta, action[1], action[2])
             
         else: 
@@ -134,21 +137,15 @@ class UBEnv(Box2DEnvUB, Serializable):
     @overrides
     def step(self, action, observation):
         """   This is identical to box2d_env_ub's 
-        step method, except adds environment-specific methods    """
-    
-        reward_computer = self.compute_reward(action, observation)
+        step method, except adds environment-specific methods
+        and changes the order of behaviors    """
+        
         #forward the state
         action = self._inject_action_noise(action)
         for _ in range(self.frame_skip):
             self.forward_dynamics(action)
-        # notifies that we have stepped the world
-        reward_computer.next()
-        # actually get the reward
-        reward = reward_computer.next()
+        
         self._invalidate_state_caches()
-        done = self.is_current_done(action)
-        next_obs = self.get_current_obs(action)
-        self.observe_angles()
         if self.steps >= 2:
             if self.steps == 2:
                 ub_0, U_0, h, k, l = self.init_ub()
@@ -156,7 +153,13 @@ class UBEnv(Box2DEnvUB, Serializable):
                 self.h2 = h; self.k2 = k; self.l2 = l
                 self.ubs.append(ub_0)
                 self.U_mat = np.array(U_0)
-            else: self.add_ub()
+            else: self.add_ub()        
+        done = self.is_current_done(action)
+        next_obs = self.get_current_obs(action)
+        reward_computer = self.compute_reward(action, next_obs)
+        reward_computer.next()
+        reward = reward_computer.next()
+
         return Step(observation=next_obs, reward=reward, done=done)        
         
     
@@ -168,8 +171,11 @@ class UBEnv(Box2DEnvUB, Serializable):
             accuracy = 1.0
         else: accuracy = 0.0
         
-        exp_chi, exp_phi = self.calc_expected()
-        loss = self.calc_loss(exp_chi, exp_phi)
+        if self.steps > 2:
+            exp_chi, exp_phi = self.calc_expected()
+            loss = self.calc_loss(exp_chi, exp_phi)
+        else:
+            loss = 0
         
         reward = accuracy - timeCost - loss/100.0
         yield reward
@@ -178,14 +184,15 @@ class UBEnv(Box2DEnvUB, Serializable):
     def is_current_done(self,action):
         choice = math.floor(action[0]+0.5)
         if choice == 0:
-            ind = int(math.floor(action[3]+0.5)); act = self.hkl_actions[ind]
+            ind = int(math.floor(action[3]+0.5))
         else:
             ind = self.hkls[-1]
+        act = self.hkl_actions[ind]
         
         if self.steps >= 2:
             exp_chi, exp_phi = self.calc_expected()
             loss = self.calc_loss(exp_chi, exp_phi)
-            two_theta = self.calc_theta(action[0], action[1], action[2])
+            two_theta = self.calc_theta(act[0], act[1], act[2])
         
             if loss <= 1.0*10**(-2):
                 self.correct += 1
@@ -204,11 +211,13 @@ class UBEnv(Box2DEnvUB, Serializable):
                     else: return False
             else:
                 self.correct = 0
+                two_theta = self.calc_theta(act[0], act[1], act[2])
                 return ((abs(self.chis[-1]) > self.max_chi) or \
                          (abs(self.phis[-1]) > self.max_phi) or \
                          (two_theta > self.max_two_theta))
             
         else: #We haven't taken enough measurements
+            two_theta = self.calc_theta(act[0], act[1], act[2])
             return ((abs(self.chis[-1] > self.max_chi)) or \
                          (abs(self.phis[-1]) > self.max_phi) or \
                          (two_theta > self.max_two_theta))
@@ -219,10 +228,9 @@ class UBEnv(Box2DEnvUB, Serializable):
         #Parameters are already in self.pars
         self.time = time.time() #In case the scientist ran to get a sandwich after reset
         
-        self.h1 = int(self.hkls[0][0]); self.k1 = int(self.hkls[0][1]); self.l1 = int(self.hkls[0][2])
-        self.h2 = int(self.hkls[1][0]); self.k2 = int(self.hkls[1][1]); self.l2 = int(self.hkls[1][2])
-
-        pars = self.pars
+        self.h1 = int(self.hkl_actions[self.hkls[0]][0]); self.k1 = int(self.hkl_actions[self.hkls[0]][1]); self.l1 = int(self.hkl_actions[self.hkls[0]][2])
+        self.h2 = int(self.hkl_actions[self.hkls[1]][0]); self.k2 = int(self.hkl_actions[self.hkls[1]][1]); self.l2 = int(self.hkl_actions[self.hkls[1]][2])
+        
         #Calculate initial value of UB
         ub_0, Umat = self.calc_mats()
         print "The first UB matrix:"
@@ -234,8 +242,10 @@ class UBEnv(Box2DEnvUB, Serializable):
         pars = self.pars
         ast, bst, cst, alphast, betast, gammast = ub.star(pars[0], pars[1], pars[2], pars[3], pars[5], pars[4]) #Calculates reciprocal parameters
         Bmat = ub.calcB(ast, bst, cst, alphast, betast, gammast, pars[2], pars[3]) #Calculates the initial B matrix
+        print "The B matrix: " + str(Bmat)
         Umat = ub.calcU(self.h1, self.k1, self.l1, self.h2, self.k2, self.l2, 0, self.chis[0], self.phis[0], 0,
                         self.chis[1], self.phis[1], Bmat)
+        print "The U matrix: " + str(Umat)
         ub_0 = np.dot(Umat, Bmat) 
         return ub_0, Umat
     
@@ -294,16 +304,16 @@ class UBEnv(Box2DEnvUB, Serializable):
     
     #Move
     def move(self, theta, chi, phi):
-        goal = [theta, chi, phi]
+        goal = [math.radians(theta), chi, phi]
+        print "Goal: " + str(goal)
         accel = 0 #Assume no forces for now
         
         self.pivot.motorEnabled = True
         if self.detector.angle < theta: self.pivot.motorSpeed = 1e5
         else: self.pivot.motorSpeed = -1e5
         
-        self.before_world_step(accel)
-        count = 0
-        while (abs(self.detector.angle - goal[0]) > 0.05 or \
+        self.before_world_step(accel); count = 0
+        while (abs(self.detector.angle - goal[0]) > 0.005 or \
                abs(self.ring.position[0] - goal[1]) > 0.05 or \
                abs(self.eu_cradle.position[1] - goal[2]) > 0.05):
             self.world.Step(
@@ -313,15 +323,35 @@ class UBEnv(Box2DEnvUB, Serializable):
             )
             
             if count == 0:
-                displacement = np.array([theta - self.detector.angle, chi - self.ring.position[0], phi - self.eu_cradle.position[1]])
+                displacement = np.array([math.radians(theta) - self.detector.angle, chi - self.ring.position[0], phi - self.eu_cradle.position[1]])
                 direction = displacement/np.linalg.norm(displacement) #unit direction vector
-                self.ring.linearVelocity = (2.0*direction[1], self.ring.linearVelocity[1]); self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[2], 2.0*direction[1])
-                self.detector.angularVelocity = 2.0*direction[0]
+                self.ring.linearVelocity = (2*direction[1], self.ring.linearVelocity[1]); self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[0], 2*direction[2])
+                self.pivot.maxMotorTorque = 10*direction[0]
+                self.detector.angularVelocity = 0.1*direction[0]
+                
+            #stopping if necessary
+            if (abs(self.detector.angle - goal[0]) < 0.005): 
+                self.detector.angularVelocity = 0
+                self.pivot.maxMotorTorque = 0.0
+                self.pivot.motorSpeed = 0.0
+                self.detector.linearDamping = 1e5
+                print "We've...stopped the detector?"
+            if (abs(self.ring.position[0] - goal[1]) <= 0.05):
+                self.ring.linearVelocity = (0,self.ring.linearVelocity[1])
+            if (abs(self.eu_cradle.position[1] - goal[2]) <= 0.05):
+                self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[0],0)
             
             count += 1
+            if count%20 == 0:
+                print "Step %d: theta, chi, and phi: %f, %f, %f" % (count, \
+                                                                   self.detector.angle, \
+                                                                   self.ring.position[0], \
+                                                                   self.eu_cradle.position[1])
+            if count >= 5000:
+                raise Exception ("Print some stuff please.")
         self.steps += 1
         
-        self.theta = self.detector.angle
+        self.theta = math.degrees(self.detector.angle)
         self.chis.append(self.ring.position[0])
         self.phis.append(self.eu_cradle.position[1])     
     
@@ -342,6 +372,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         q = 4*math.pi/self.wavelength * math.sin(math.radians(self.calc_theta(action[0], action[1], action[2])))
         Q_nu = np.dot(self.ubs[-1], action)
+        print "Q_nu: " + str(Q_nu)
         
         #MNQ_nu = [q, 0, 0]
         phi_expected = []; chi_expected = [] #For testing cases
@@ -372,17 +403,17 @@ class UBEnv(Box2DEnvUB, Serializable):
                 #If we are here, q2 is nonzero
                 sinsqr_chi = 1.0/(1.0 + (q1/q2)**2)
                 chi_expected.append(math.degrees(math.asin(math.sqrt(sinsqr_chi))))
-                chi_expected.append(math.degrees(math.asin(math.sqrt(sinsqr_chi))))
+                chi_expected.append(math.degrees(math.asin(-math.sqrt(sinsqr_chi))))
                 
         #Testing the possible phi, chi values
         exp_phi = 0; exp_chi = 0 #Default
         for ph in phi_expected:
             for ch in chi_expected:
                 val = q1*math.cos(math.radians(ch)) + q2*math.sin(math.radians(ch))*math.sin(math.radians(ph)) + q3*math.sin(math.radians(ch))*math.cos(math.radians(ph))
-                if abs(q - val) <= 0.10:
+                if abs(q - val) <= 0.15:
                     exp_phi = ph; exp_chi = ch
         
-        print ("Expected chi and phi values for %d: %d, %d" % (2*self.theta), exp_chi, exp_phi)
+        print "Expected chi and phi values for two theta = %d: %d, %d" % ((2*self.theta), exp_chi, exp_phi)
         return exp_chi, exp_phi
     
     #Find the loss - the angular difference
@@ -393,17 +424,17 @@ class UBEnv(Box2DEnvUB, Serializable):
     #def observe_angles(action):
         ##Get measurements from the machine
         
-    def observe_angles(self):
-        self.chis.append(sys.maxint); self.phis.append(sys.maxint) #So we have something to replace
-        good = False
-        while good == False:
-            try:
-                self.chis[-1] = float(input("At what chi are you currently measuring? "))
-                self.phis[-1] = float(input("At what phi are you currenlty measuring? "))
-                if abs(self.chis[-1]) < 90 and abs(self.phis[-1] - 180) < 180: good = True
-                else: print "Please input valid numerical values (-90 < chi < 90, and 0 < phi < 360)"
-            except:
-                print "Please input valid numerical values"
+    #def observe_angles(self):
+        #self.chis.append(sys.maxint); self.phis.append(sys.maxint) #So we have something to replace
+        #good = False
+        #while good == False:
+            #try:
+                #self.chis[-1] = float(input("At what chi are you currently measuring? "))
+                #self.phis[-1] = float(input("At what phi are you currenlty measuring? "))
+                #if abs(self.chis[-1]) < 90 and abs(self.phis[-1] - 180) < 180: good = True
+                #else: print "Please input valid numerical values (-90 < chi < 90, and 0 < phi < 360)"
+            #except:
+                #print "Please input valid numerical values"
                 
     def update_Umat(self):
         exp_chi, exp_phi = self.calc_expected()
@@ -411,19 +442,19 @@ class UBEnv(Box2DEnvUB, Serializable):
         
         if loss <= .75: return self.U_mat
         else:        
-            #Choose a previous index to change, among those with the same 2*theta
+            #Choose a previous index to change, among those with very similar 2*theta
             #Random for now                
             ind = np.where(np.array([self.h2, self.k2, self.l2])==self.hkl_actions[:,0:3])[0][0]
             action = self.hkl_actions[ind]
             two_theta = 2*self.calc_theta(action[0], action[1], action[2])
             
             possible = []; i = 0
-            while abs(self.theta*2 - two_theta) <= 1:
-                print "new h2, k2, and l2"
-                print self.h2, self.k2, self.l2
-                if self.hkl_actions[ind+i][0] != self.h2 and self.hkl_actions[ind+i][1] != self.k2 and self.hkl_actions[ind+i][2] != self.l2:
-                    possible.append(ind+i)
-                i += 1
+            for i in range(len(self.hkl_actions)):    
+                if abs(self.theta*2 - two_theta) <= 0.5:
+                    print "new h2, k2, and l2"
+                    print self.h2, self.k2, self.l2
+                    if self.hkl_actions[i][0] != self.h2 and self.hkl_actions[i][1] != self.k2 and self.hkl_actions[i][2] != self.l2:
+                        possible.append(ind+i)
             
             if possible:
                 choice = rd.randint(0, len(possible))
@@ -434,7 +465,7 @@ class UBEnv(Box2DEnvUB, Serializable):
                 _, Umat = self.calc_mats(self.chis[-1], self.phis[-1])
                 return Umat
             
-            return self.Umat
+            return self.U_mat
                 
     #Happens after each completed action
     def add_ub(self):
