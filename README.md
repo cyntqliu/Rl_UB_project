@@ -9,6 +9,7 @@ The fruit of my 2016 summer internship! To be used with rllab (https://github.co
   <li> normalized_env_ub.py: /rllab/envs/
   <li> ddpg_UB.py: home directory
   <li> ddpg_alg_ub.py: /rllab/algos/
+  <li> UB_Generator.py home directory
   <li> All reflections files (data folder): home directory
 </ol>
 <p> Note that this work is very much in progress. Thank you for your cooperation. </p>
