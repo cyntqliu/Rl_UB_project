@@ -34,7 +34,8 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                 self.obs = self.experiment_space.get_obs()
         except:
             self.experiments = True
-            self.fname = raw_input("Please provide a sample hkl file to allow our program to determine action and observation dimensions:\n ")
+            self.fname = raw_input("Please provide a sample hkl file to allow our program \n" \
+                                   "to determine action and observation dimensions:\n ")
             self.experiment_space = UBSpace(self.fname)
             
             self.hkl_actions = self.experiment_space.get_hkl_actions()
