@@ -35,7 +35,7 @@ class UBSpace(Space):
             f.close()
             
             #Now define entire space as if continuous
-            lbnd = np.array([0, -90, 0, 0]); ubnd = np.array([-1, 90, 360, self.hkl_discrete.n])
+            lbnd = np.array([0, -90, 0, 0]); ubnd = np.array([1, 90, 360, self.hkl_discrete.n])
             self.all_space = Box(lbnd, ubnd)
         
         else:
@@ -113,3 +113,5 @@ class UBSpace(Space):
     @overrides
     def new_tensor_variables(self, name, extra_dims):
         pass
+        
+    
