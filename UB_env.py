@@ -25,7 +25,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         """
         
         self.Om = np.array([[1,0,0],[0,1,0],[0,0,1]])
-        self.background = .01 #background noise
+        self.background = 1.0 #background noise
         
         """    Variables:
         These variables will be read along with the action:
@@ -54,10 +54,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         self.eu_cradle = find_body(self.world, "eu_cradle") #phi
         self.detector = find_body(self.world, "detector") #theta
         self.pivot = find_joint(self.world, "angular_axis") #pivot that enables angular movement
-        
-        
-        Serializable.__init__(self, *args, **kwargs)
-        
+        Serializable.__init__(self, *args, **kwargs)    
     
     @overrides
     def reset(self):
@@ -137,8 +134,8 @@ class UBEnv(Box2DEnvUB, Serializable):
     @overrides
     def step(self, action, observation):
         """   This is identical to box2d_env_ub's 
-        step method, except adds environment-specific methods
-        and changes the order of behaviors    """
+        step method, except adds environment-specific methods,
+        changes the order of behaviors    """
         
         #forward the state
         action = self._inject_action_noise(action)
@@ -156,6 +153,9 @@ class UBEnv(Box2DEnvUB, Serializable):
             else: self.add_ub()        
         done = self.is_current_done(action)
         next_obs = self.get_current_obs(action)
+        if next_obs[0] > self.background: success = True
+        else: success = False
+        if success: self.steps += 1
         reward_computer = self.compute_reward(action, next_obs)
         reward_computer.next()
         reward = reward_computer.next()
@@ -184,7 +184,7 @@ class UBEnv(Box2DEnvUB, Serializable):
     def is_current_done(self,action):
         choice = math.floor(action[0]+0.5)
         if choice == 0:
-            ind = int(math.floor(action[3]+0.5))
+            ind = int(math.floor(action[3]-0.00001))
         else:
             ind = self.hkls[-1]
         act = self.hkl_actions[ind]
@@ -224,7 +224,7 @@ class UBEnv(Box2DEnvUB, Serializable):
         
     #------------------------ ADDED METHODS -----------------------------------
 
-    def init_ub(self): #Will be massively renovated.
+    def init_ub(self):
         #Parameters are already in self.pars
         self.time = time.time() #In case the scientist ran to get a sandwich after reset
         
@@ -302,20 +302,17 @@ class UBEnv(Box2DEnvUB, Serializable):
         else: theta = math.degrees(math.asin(self.wavelength/(2*d)))        
         return theta
     
-    #Move
-    def move(self, theta, chi, phi):
-        goal = [math.radians(theta), chi, phi]
-        print "Goal: " + str(goal)
-        accel = 0 #Assume no forces for now
+    def move_theta(self, theta):
+        goal = math.radians(theta)
+        print "Theta goal: " + str(goal)
+        accel = 0
         
         self.pivot.motorEnabled = True
-        if self.detector.angle < theta: self.pivot.motorSpeed = 1e5
+        if self.detector.angle < goal: self.pivot.motorSpeed = 1e5
         else: self.pivot.motorSpeed = -1e5
         
         self.before_world_step(accel); count = 0
-        while (abs(self.detector.angle - goal[0]) > 0.005 or \
-               abs(self.ring.position[0] - goal[1]) > 0.05 or \
-               abs(self.eu_cradle.position[1] - goal[2]) > 0.05):
+        while (abs(self.detector.angle - goal) > 0.015):
             self.world.Step(
                 self.extra_data.timeStep,
                 self.extra_data.velocityIterations,
@@ -323,37 +320,51 @@ class UBEnv(Box2DEnvUB, Serializable):
             )
             
             if count == 0:
-                displacement = np.array([math.radians(theta) - self.detector.angle, chi - self.ring.position[0], phi - self.eu_cradle.position[1]])
-                direction = displacement/np.linalg.norm(displacement) #unit direction vector
-                self.ring.linearVelocity = (2*direction[1], self.ring.linearVelocity[1]); self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[0], 2*direction[2])
-                self.pivot.maxMotorTorque = 10*direction[0]
-                self.detector.angularVelocity = 0.1*direction[0]
-                
-            #stopping if necessary
-            if (abs(self.detector.angle - goal[0]) < 0.005): 
-                self.detector.angularVelocity = 0
-                self.pivot.maxMotorTorque = 0.0
-                self.pivot.motorSpeed = 0.0
-                self.detector.linearDamping = 1e5
-                print "We've...stopped the detector?"
-            if (abs(self.ring.position[0] - goal[1]) <= 0.05):
-                self.ring.linearVelocity = (0,self.ring.linearVelocity[1])
-            if (abs(self.eu_cradle.position[1] - goal[2]) <= 0.05):
-                self.eu_cradle.linearVelocity = (self.eu_cradle.linearVelocity[0],0)
+                self.pivot.maxMotorTorque = 1.0
+                self.detector.angularVelocity = 0.1
+            if count%20 == 0:
+                print "Step %d: theta = %f" % (count, self.detector.angle)
+            if count == 5000:
+                raise Exception ("Print some stuff please.")
+            count += 1
             
+    def move_chiphi(self, chi, phi):
+        goal = [chi,phi]
+        print "Chi and phi goal: " + str(goal)
+        accel = 0
+        
+        self.before_world_step(accel); count = 0
+        while(abs(self.ring.position[0] - goal[0]) > 0.11 or \
+               abs(self.eu_cradle.position[0] - goal[1]) > 0.11):
+            if count > 0:
+                self.eu_cradle.linearVelocity = (direction[1]/abs(direction[1]) * max(0.02,abs(2*direction[1])), self.eu_cradle.linearVelocity[1])
+            self.world.Step(
+                self.extra_data.timeStep,
+                self.extra_data.velocityIterations,
+                self.extra_data.positionIterations           
+            )
+            
+            if count == 0:
+                displacement = np.array([chi - self.ring.position[0], phi - self.eu_cradle.position[0]])
+                direction = displacement/np.linalg.norm(displacement)
+                self.ring.linearVelocity = (direction[0]/abs(direction[0]) * max(0.02,abs(2*direction[0])), self.ring.linearVelocity[1])
+ 
             count += 1
             if count%20 == 0:
-                print "Step %d: theta, chi, and phi: %f, %f, %f" % (count, \
-                                                                   self.detector.angle, \
-                                                                   self.ring.position[0], \
-                                                                   self.eu_cradle.position[1])
+                print "Step %d: chi and phi: %f, %f" % (count, \
+                                                            self.ring.position[0], \
+                                                            self.eu_cradle.position[0])
             if count >= 5000:
-                raise Exception ("Print some stuff please.")
-        self.steps += 1
+                raise Exception ("Print some stuff please.")                 
+
+    #Move
+    def move(self, theta, chi, phi):
+        self.move_theta(theta)
+        self.move_chiphi(chi, phi)
         
         self.theta = math.degrees(self.detector.angle)
         self.chis.append(self.ring.position[0])
-        self.phis.append(self.eu_cradle.position[1])     
+        self.phis.append(self.eu_cradle.position[0])     
     
     #Chi
     def calc_M(self):
@@ -419,22 +430,6 @@ class UBEnv(Box2DEnvUB, Serializable):
     #Find the loss - the angular difference
     def calc_loss(self, exp_chi, exp_phi):
         return (self.chis[-1] - exp_chi)**2 + (self.phis[-1] - exp_phi)**2
-    
-    ##Take information directly from machine (this is filler)
-    #def observe_angles(action):
-        ##Get measurements from the machine
-        
-    #def observe_angles(self):
-        #self.chis.append(sys.maxint); self.phis.append(sys.maxint) #So we have something to replace
-        #good = False
-        #while good == False:
-            #try:
-                #self.chis[-1] = float(input("At what chi are you currently measuring? "))
-                #self.phis[-1] = float(input("At what phi are you currenlty measuring? "))
-                #if abs(self.chis[-1]) < 90 and abs(self.phis[-1] - 180) < 180: good = True
-                #else: print "Please input valid numerical values (-90 < chi < 90, and 0 < phi < 360)"
-            #except:
-                #print "Please input valid numerical values"
                 
     def update_Umat(self):
         exp_chi, exp_phi = self.calc_expected()
