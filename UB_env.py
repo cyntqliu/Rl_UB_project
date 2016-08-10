@@ -337,7 +337,8 @@ class UBEnv(Box2DEnvUB, Serializable):
         while(abs(self.ring.position[0] - goal[0]) > 0.11 or \
                abs(self.eu_cradle.position[0] - goal[1]) > 0.11):
             if count > 0:
-                self.eu_cradle.linearVelocity = (direction[1]/abs(direction[1]) * max(0.02,abs(2*direction[1])), self.eu_cradle.linearVelocity[1])
+                self.eu_cradle.linearVelocity = (direction[1]/abs(direction[1]) * max(0.02,abs(2*direction[1])), \
+                                                self.eu_cradle.linearVelocity[1])
             self.world.Step(
                 self.extra_data.timeStep,
                 self.extra_data.velocityIterations,
