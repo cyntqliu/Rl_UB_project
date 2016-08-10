@@ -104,16 +104,17 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         """
         #print action
         choice = math.floor(action[0]+0.5)
+        chi = action[1]; phi = action[2]
+        good = False
         if choice == 0:
-            ind = math.floor(action[3])
+            ind = max(0,math.floor(action[3]-0.00001))
             assert self.hkl_space.contains(int(ind)), "Sorry, your hkl vector input does not exist for this crystal"
             h_vec = self.hkl_actions[int(ind)]
             self.last_discrete = ind
             
-            good = False
             while good != True:
                 try:
-                    yesorno = int(raw_input("Do we see a significant peak at the expected chi and phi values for <%d,%d,%d>? " % (h_vec[0], h_vec[1], h_vec[2])))
+                    yesorno = int(raw_input("Do we see a significant peak at %f, %f for the new plane <%d,%d,%d>? " % (chi, phi, h_vec[0], h_vec[1], h_vec[2])))
                     if yesorno == 0 or yesorno == 1: good = True
                     else: print "Please input a valid integer"
                 except:
@@ -127,12 +128,11 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                 observation = [0,0]
                 
         elif choice == 1:
-            chi = action[1]; phi = action[2]
-            good = False
+            h_vec = self.hkl_actions[int(self.last_discrete)]
             while good != True:
                 try:
-                    yesorno = int(raw_input("We have no moved to (chi, phi) = (%d, %d) for the same plane as that in the previous measurement /"
-                    "\nDo we see a significant peak at this location? Type 0 if no and 1 if yes " % (chi, phi)))
+                    yesorno = int(raw_input("We have no moved to (chi, phi) = (%f, %f) for the same plane (<%d,%d,%d>)\nas that in the previous measurement "
+                    "\nDo we see a significant peak at this location? Type 0 if no and 1 if yes " % (chi, phi, h_vec[0], h_vec[1], h_vec[2])))
                     if yesorno == 0 or yesorno == 1: good = True
                     else: print "Please input a valid integer"
                 except:
@@ -171,4 +171,4 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                     elif state.typ == "apos": self._position_ids.append("theta")
                     else: self._position_ids.append(state.typ)
                     
-        return self._position_ids        
+        return self._position_ids
