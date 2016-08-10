@@ -174,17 +174,11 @@ class UBEnv(Box2DEnvUB, Serializable):
     @overrides
     def compute_reward(self, action, observation):
         yield
-        timeCost = (time.time() - self.time)/1800
+        timeCost = (time.time() - self.time)/600
         if observation[0] >= self.background:
             accuracy = 1.0
         else: accuracy = 0.0
-        
-        if self.steps > 2:
-            exp_chi, exp_phi = self.calc_expected()
-            loss = self.calc_loss(exp_chi, exp_phi)
-        else:
-            loss = 0
-        
+        loss = self.calc_loss(action)
         reward = accuracy - timeCost - loss/100.0
         yield reward
     
@@ -439,8 +433,14 @@ class UBEnv(Box2DEnvUB, Serializable):
         return exp_chi, exp_phi
     
     #Find the loss - the angular difference
-    def calc_loss(self, exp_chi, exp_phi):
-        return (self.chis[-1] - exp_chi)**2 + (self.phis[-1] - exp_phi)**2
+    def calc_loss(self, action):
+        if self.steps > 2:
+            exp_chi, exp_phi = self.calc_expected()
+            loss = (self.chis[-1] - exp_chi)**2 + (self.phis[-1] - exp_phi)**2 + \
+                abs(action[1])/25.0 + action[2]/25.0
+        else:
+            loss = abs(action[1]/25.0) + action[2]/25.0         
+        return loss
                 
     def update_Umat(self):
         exp_chi, exp_phi = self.calc_expected()
