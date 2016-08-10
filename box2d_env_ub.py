@@ -105,7 +105,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         #print action
         choice = math.floor(action[0]+0.5)
         if choice == 0:
-            ind = math.floor(action[3]+0.5)
+            ind = math.floor(action[3])
             assert self.hkl_space.contains(int(ind)), "Sorry, your hkl vector input does not exist for this crystal"
             h_vec = self.hkl_actions[int(ind)]
             self.last_discrete = ind
@@ -122,6 +122,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             if yesorno == 1:
                 intensity = self.obs[ind][0]; f_2 = self.obs[ind][1]
                 observation = [intensity, f_2]
+                success = True
             else:
                 observation = [0,0]
                 
@@ -140,6 +141,7 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             if yesorno == 1:
                 intensity = self.obs[self.last_discrete][0]; f_2 = self.obs[self.last_discrete][1]
                 observation = [intensity, f_2]
+                success = True
             else:
                 observation = [0, 0]
         
@@ -153,16 +155,20 @@ class Box2DEnvUB(Box2DEnv, Serializable):
         noisy_obs = self._inject_obs_noise(raw_obs)
         if self.position_only:
             return self._filter_position(noisy_obs)
-        return noisy_obs        
+        return noisy_obs
     
     @overrides
     def _get_position_ids(self):
         if self._position_ids is None:
             self._position_ids = []
+            count = 0 
             for idx, state in enumerate(self.extra_data.states):
                 if state.typ in ["xpos", "ypos", "apos", "dist", "angle"]:
-                    if state.typ == "xpos": self._position_ids.append("chi")
-                    elif state.typ == "ypos": self._position_ids.append("phi")
+                    if state.typ == "xpos": 
+                        if count == 0: self._get_position_ids.append("chi")
+                        else: self._get_position_ids.append("phi")
+                        count += 1
+                    elif state.typ == "apos": self._position_ids.append("theta")
                     else: self._position_ids.append(state.typ)
                     
         return self._position_ids        
