@@ -15,31 +15,33 @@ class UBSpace(Space):
     def __init__(self,fname):
         self.fname = fname
         assert type(fname) is str, "Your file name is not a string"
-        #print fname[-4:]
-        if fname[-4:] == ".txt":
-            f = open(fname, 'r')
-            self.hkl_actions = []; count = 0
-            self.obs = []
-            for line in f: 
-                count += 1
-                line = line.strip()
-                intermed = line.split()
-                if re.search('^[^A-z]+$', line) and len(intermed) > 1:
-                    self.hkl_actions.append([int(intermed[0]), int(intermed[1]), int(intermed[2])]) #h, k, l - thetas are calculated
-                    self.obs.append(intermed[11:13]) #Intensity and structure factor
-    
-            self.hkl_actions = np.array(self.hkl_actions)
-            self.obs = np.array(self.obs)
-            self.hkl_discrete = Discrete(len(self.hkl_actions))
-            self.last_discrete = 0 #index of the last discrete action
-            f.close()
-            
-            #Now define entire space as if continuous
-            lbnd = np.array([0, -90, 0, 0]); ubnd = np.array([1, 90, 360, self.hkl_discrete.n])
-            self.all_space = Box(lbnd, ubnd)
+        good = False
+        while good != True:
+            if fname[-4:] == ".txt":
+                f = open(fname, 'r')
+                self.hkl_actions = []; count = 0
+                self.obs = []
+                for line in f: 
+                    count += 1
+                    line = line.strip()
+                    intermed = line.split()
+                    if re.search('^[^A-z]+$', line) and len(intermed) > 1:
+                        self.hkl_actions.append([int(intermed[0]), int(intermed[1]), int(intermed[2])]) #h, k, l - thetas are calculated
+                        self.obs.append(intermed[11:13]) #Intensity and structure factor
         
-        else:
-            raise Exception("The file is not of type .txt. If it is, please type the file extension in its name. ")
+                self.hkl_actions = np.array(self.hkl_actions)
+                self.obs = np.array(self.obs)
+                self.hkl_discrete = Discrete(len(self.hkl_actions))
+                self.last_discrete = 0 #index of the last discrete action
+                f.close()
+                
+                #Now define entire space as if continuous
+                lbnd = np.array([0, -90, 0, 0]); ubnd = np.array([1, 90, 360, self.hkl_discrete.n])
+                self.all_space = Box(lbnd, ubnd)
+                good = True
+            
+            else:
+                raise Exception("The file is not of type .txt. If it is, please type the file extension in its name. ")
         
     def get_hkl_actions(self):
         return self.hkl_actions
@@ -113,5 +115,3 @@ class UBSpace(Space):
     @overrides
     def new_tensor_variables(self, name, extra_dims):
         pass
-        
-    
