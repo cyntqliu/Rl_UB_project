@@ -33,17 +33,16 @@ class Box2DEnvUBAuto(Box2DEnv, Serializable):
                     try:
                         self.correct = raw_input("What is the file containing the correct chi and phi values? ") #Auto part
                         fle = open(self.correct, 'r')
+                        #getting "correct answers"
+                        self.ans = []
+                        for line in fle:
+                            intermed = line.split()
+                            self.ans.append([float(intermed[4]), float(intermed[5]), float(intermed[6])])
+                        self.ans = np.array(self.ans)                               
                         good = True
-                    except IOError:
+                    except:
                         print "Please check the name and location of the file containing the correct chi and phi values."
                 
-                #getting "correct answers"
-                self.ans = []
-                for line in fle:
-                    intermed = line.split()
-                    self.ans.append([float(intermed[4]), float(intermed[5])])
-                self.ans = np.array(self.ans)                
-
         except AttributeError:
             self.experiments = True
             self.fname = raw_input("Please provide a sample hkl file to allow our program \n" \
@@ -173,4 +172,4 @@ class Box2DEnvUBAuto(Box2DEnv, Serializable):
                     elif state.typ == "apos": self._position_ids.append("theta")
                     else: self._position_ids.append(state.typ)
                     
-        return self._position_ids        
+        return self._position_ids
