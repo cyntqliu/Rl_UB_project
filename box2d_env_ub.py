@@ -27,22 +27,17 @@ class Box2DEnvUB(Box2DEnv, Serializable):
                 self.fname = raw_input("What is the name of the file containing the possible hkl's? ") #Used by UBEnv
                 self.experiment_space = UBSpace(self.fname)
                 
-                self.hkl_actions = self.experiment_space.get_hkl_actions()
-                self.hkl_space = self.experiment_space.get_discrete()
-                self.all_space = self.experiment_space.get_all_actions()
-                self.last_discrete = self.experiment_space.get_last_discrete()
-                self.obs = self.experiment_space.get_obs()
         except:
             self.experiments = True
             self.fname = raw_input("Please provide a sample hkl file to allow our program \n" \
                                    "to determine action and observation dimensions:\n ")
             self.experiment_space = UBSpace(self.fname)
             
-            self.hkl_actions = self.experiment_space.get_hkl_actions()
-            self.hkl_space = self.experiment_space.get_discrete()
-            self.all_space = self.experiment_space.get_all_actions()
-            self.last_discrete = self.experiment_space.get_last_discrete()
-            self.obs = self.experiment_space.get_obs()            
+        self.hkl_actions = self.experiment_space.get_hkl_actions()
+        self.hkl_space = self.experiment_space.get_discrete()
+        self.all_space = self.experiment_space.get_all_actions()
+        self.last_discrete = self.experiment_space.get_last_discrete()
+        self.obs = self.experiment_space.get_obs()                
     
     @property
     @overrides
@@ -123,7 +118,6 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             if yesorno == 1:
                 intensity = self.obs[ind][0]; f_2 = self.obs[ind][1]
                 observation = [intensity, f_2]
-                success = True
             else:
                 observation = [0,0]
                 
@@ -141,7 +135,6 @@ class Box2DEnvUB(Box2DEnv, Serializable):
             if yesorno == 1:
                 intensity = self.obs[self.last_discrete][0]; f_2 = self.obs[self.last_discrete][1]
                 observation = [intensity, f_2]
-                success = True
             else:
                 observation = [0, 0]
         
