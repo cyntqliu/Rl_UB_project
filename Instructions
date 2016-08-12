@@ -3,13 +3,14 @@ Instructions
 1. Download rllab: https://github.com/rllab/rllab
 2. Put all the files from this repository into their respective locations in rllab
 3. Run ddpg_UB.py
-4. a. If you are using Box2d_env_ub, follow instructions in program
-4. b. If you are using Box2d_env_ub_auto, be sure to change the inheritance for UBEnv to Box2dEnvUBAuto (lines 20, 22) and uncomment the
+4. a. If you are using Box2d_env_ub_auto, follow instructions in program
+4. b. If you are using Box2d_env_ub, be sure to change the inheritance for UBEnv to Box2dEnvUB (lines 20, 22) and uncomment the
       import statement
 5. Please report any bugs to cynthiatliu
 
 If you would like to use your own data, please conduct experiments or run LAZY to determine possible hkl planes. 
 Then, format the hkl listing the same way as the files in "data."
-If you would like to conduct automated experiments, create a file similar to correct.txt and run using Box2d_env_ub_auto
+If you would like to conduct automated experiments, create a file similar to correct.txt (which is for Dy2 (WO4)3.txt and
+run using Box2d_env_ub_auto.
 Place your file in the same location in the rllab directory as the other .txt files, and be sure to type the name
 correctly during runtime!
