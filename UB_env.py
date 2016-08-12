@@ -96,7 +96,6 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
         self.ring.position = (0,self.ring.position[1])
         self.eu_cradle.position = (self.eu_cradle.position[0],0)
         self.detector.angle = 0
-        self.theta = self.detector.angle
         f.close()
         print "Start at (0,0,0)"
         return self.get_current_obs([0,0,0,0]) #get_current_obs must take an action
@@ -163,9 +162,9 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
                 self.chkls.index(self.hkls[-1]) #if we already measured this plane, don't increase steps
             except: #phew good.
                 self.steps += 1
-                self.theta = math.degrees(self.detector.angle)
-                self.chis.append(self.ring.position[0])
-                self.phis.append(self.eu_cradle.position[0])
+                ind = int(max(0,math.floor(action[3]-0.00001)))
+                self.chis.append(self.ans[ind][0]) #correct value
+                self.phis.append(self.ans[ind][1])
                 self.chkls.append(self.hkls[-1])
         #Reward
         reward_computer = self.compute_reward(action, next_obs)
@@ -383,7 +382,7 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
         ind = int(self.hkls[-1])
         action = self.hkl_actions[ind]
         
-        q = 4*math.pi/self.wavelength * math.sin(math.radians(self.calc_theta(action[0], action[1], action[2])))
+        q = 2/self.wavelength * math.sin(math.radians(self.calc_theta(action[0], action[1], action[2])))
         Q_nu = np.dot(self.ubs[-1], action)
         print "Q_nu: " + str(Q_nu)
         
@@ -426,6 +425,7 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
                 if abs(q - val) <= 0.15:
                     exp_phi = ph; exp_chi = ch
         
+        print "expected chi and phi: %f, %f" % (exp_chi, exp_phi)
         return exp_chi, exp_phi
     
     #Find the loss - the angular difference
@@ -451,16 +451,21 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
             for i in range(len(self.hkl_actions)):
                 if abs(math.radians(self.ans[i][-1]) - two_theta) <= 0.05:
                     if self.hkl_actions[i][0] != self.h2 and self.hkl_actions[i][1] != self.k2 and self.hkl_actions[i][2] != self.l2:
-                        print "hey what's up"
                         possible.append(i)
             
             if possible:
-                choice = rd.randint(0, len(possible))
-                new2 = self.hkl_actions[choice][0:3]
-                self.h2 = new2[0]; self.l2 = new2[1]; self.k2 = new2[2]
-                #Update
-                _, Umat = self.calc_mats()
-                return Umat
+                good = False
+                while good != True:
+                    try:
+                        choice = possible[rd.randint(0, len(possible)-1)]                        
+                        self.chkls.index(choice)
+                    except:
+                        good = True
+                        new2 = self.hkl_actions[choice][0:3]
+                        self.h2 = new2[0]; self.l2 = new2[1]; self.k2 = new2[2]
+                        #Update
+                        _, Umat = self.calc_mats()
+                        return Umat
             
             return self.U_mat
                 
