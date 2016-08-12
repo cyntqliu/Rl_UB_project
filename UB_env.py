@@ -317,7 +317,7 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
         else: self.pivot.motorSpeed = -1e5
         
         self.before_world_step(accel); count = 0
-        while (abs(self.detector.angle - goal) > 0.015):
+        while True:
             self.world.Step(
                 self.extra_data.timeStep,
                 self.extra_data.velocityIterations,
@@ -328,6 +328,8 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
                 self.pivot.maxMotorTorque = 1.0
                 self.detector.angularVelocity = 0.1
             count += 1
+            
+            if (abs(self.detector.angle - goal) < 0.015): break
             
         self.pivot.motorEnabled = False
         self.pivot.angularVelocity = 0.0 #so our thetas don't run away
@@ -340,17 +342,18 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
         self.detector.angularVelocity = 0
         
         self.before_world_step(0); count = 0
-        while(abs(self.ring.position[0] - goal[0]) > 0.11 or \
-               abs(self.eu_cradle.position[0] - goal[1]) > 0.11):
-                
+        while True:
             self.world.Step(
                 self.extra_data.timeStep,
                 self.extra_data.velocityIterations,
                 self.extra_data.positionIterations           
             )
             
-            if abs(self.ring.position[0] - goal[0]) < 0.11: self.ring.linearVelocity = (0,0)
-            elif abs(self.eu_cradle.position[0] - goal[1]) < 0.11: self.eu_cradle.linearVelocity = (0,0)
+            if abs(self.ring.position[0] - goal[0]) < 0.11:
+                if abs(self.eu_cradle.position[0] - goal[1]) < 0.11: break
+                self.ring.linearVelocity = (0,0)
+            elif abs(self.eu_cradle.position[0] - goal[1]) < 0.11: 
+                self.eu_cradle.linearVelocity = (0,0)
             
             if count%20 == 0:
                 displacement = np.array([chi - self.ring.position[0], phi - self.eu_cradle.position[0]])
@@ -419,10 +422,11 @@ class UBEnv(Box2DEnvUBAuto, Serializable):
                 
         #Testing the possible phi, chi values
         exp_phi = 0; exp_chi = 0 #Default
-        for ph in phi_expected:
-            for ch in chi_expected:
+        for i in range(len(phi_expected)-1,-1,-1):
+            for j in range(len(chi_expected)-1,-1,-1): #We prefer earlier values
+                ch = chi_expected[j]; ph = phi_expected[i]
                 val = q1*math.cos(math.radians(ch)) + q2*math.sin(math.radians(ch))*math.sin(math.radians(ph)) + q3*math.sin(math.radians(ch))*math.cos(math.radians(ph))
-                if abs(q - val) <= 0.15:
+                if abs(q - val) <= 0.10:
                     exp_phi = ph; exp_chi = ch
         
         print "expected chi and phi: %f, %f" % (exp_chi, exp_phi)
