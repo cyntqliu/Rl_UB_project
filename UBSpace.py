@@ -39,9 +39,6 @@ class UBSpace(Space):
                 lbnd = np.array([0, -90, 0, 0]); ubnd = np.array([1, 90, 360, self.hkl_discrete.n])
                 self.all_space = Box(lbnd, ubnd)
                 good = True
-            
-            else:
-                raise Exception("The file is not of type .txt. If it is, please type the file extension in its name. ")
         
     def get_hkl_actions(self):
         return self.hkl_actions
